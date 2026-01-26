@@ -116,6 +116,9 @@ def main() -> None:
         repo.git.checkout("main")
         print("Switched to existing branch 'main'.")
 
+    # *** NEW: discard any stale merge‑conflict files ***
+    repo.git.reset("--hard")          # ensures a clean working tree
+
     # ------------------------------------------------------------------
     # Pull the latest changes from the remote so we can push
     # ------------------------------------------------------------------
