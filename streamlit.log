@@ -1252,3 +1252,26 @@ Rebase failed: Cmd('git') failed due to: exit code(128)
   cmdline: git pull -v --rebase -- origin main
   stderr: 'error: cannot pull with rebase: You have unstaged changes.
 error: please commit or stash them.' – falling back to merge
+2026-01-27 10:57:30.056 Script compilation error
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.12/dist-packages/streamlit/runtime/scriptrunner/script_runner.py", line 574, in _run_script
+    code = self._script_cache.get_bytecode(script_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/streamlit/runtime/scriptrunner/script_cache.py", line 72, in get_bytecode
+    filebody = magic.add_magic(filebody, script_path)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/streamlit/runtime/scriptrunner/magic.py", line 45, in add_magic
+    tree = ast.parse(code, script_path, "exec")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/ast.py", line 52, in parse
+    return compile(source, filename, mode, flags,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/app.py", line 227
+    tool_result = f"⚠️  Tool '{tool_call.get(\"name\")}' not registered."
+                                              ^
+SyntaxError: unexpected character after line continuation character
+2026-01-27 10:57:30.058 Thread 'MainThread': missing ScriptRunContext! This warning can be ignored when running in bare mode.
+Rebase failed: Cmd('git') failed due to: exit code(128)
+  cmdline: git pull -v --rebase -- origin main
+  stderr: 'error: cannot pull with rebase: You have unstaged changes.
+error: please commit or stash them.' – falling back to merge
