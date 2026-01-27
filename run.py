@@ -164,7 +164,7 @@ def main():
 
     # 4. Install required Python packages
     print("📦 Installing Python packages...")
-    run("pip install -q streamlit pygithub", shell=True)
+    run("pip install -q streamlit pygithub pyngrok", shell=True)
 
     # 5. Start the Streamlit UI
     streamlit_log = Path("streamlit.log").open("w", encoding="utf-8", buffering=1)
