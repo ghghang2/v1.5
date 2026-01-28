@@ -654,9 +654,13 @@ def main():
                 except Exception as exc:
                     tool_result = f"❌  Tool error: {exc}"
 
-            st.chat_message("assistant").markdown(
-                f"**Tool call**: `{tool_call.get("name")}`({', '.join(f'{k}={v}' for k, v in args.items())}) → `{tool_result}`"
+            # Append tool call result to the current placeholder
+            tool_output_str = (
+                f"**Tool call**: `{tool_call.get('name')}`"
+                f"({', '.join(f'{k}={v}' for k, v in args.items())}) → `{tool_result}`"
             )
+            # Update the placeholder with the tool output (keeps the streamed text)
+            placeholder.markdown(final_text + "\n\n" + tool_output_str, unsafe_allow_html=True)
 
             # Tell the model the result of the tool call
             assistant_tool_call_msg = {
@@ -819,17 +823,18 @@ def main() -> None:
 
     # --- 3️⃣  Download the pre‑built llama‑server -------------------------
     _run(
-        f"gh release download --repo {REPO} --pattern llama-server",
+        f"gh release download --repo {REPO} --pattern llama-server --skip-existing",
         shell=True,
         env={"GITHUB_TOKEN": os.getenv("GITHUB_TOKEN")},
     )
     _run("chmod +x ./llama-server", shell=True)
 
     # --- 4️⃣  Start llama‑server ------------------------------------------
+    LLAMA_LOG_file = LLAMA_LOG.open("w", encoding="utf-8", buffering=1)
     llama_proc = subprocess.Popen(
         ["./llama-server", "-hf", MODEL, "--port", "8000"],
-        stdout=LLAMA_LOG.open("w", encoding="utf-8", buffering=1),
-        stderr=LLAMA_LOG,
+        stdout=LLAMA_LOG_file,
+        stderr=subprocess.STDOUT,
         start_new_session=True,
     )
     print(f"✅  llama-server started (PID: {llama_proc.pid}) – waiting…")
@@ -842,6 +847,7 @@ def main() -> None:
     _run("pip install -q streamlit pygithub pyngrok", shell=True)
 
     # --- 6️⃣  Start Streamlit UI ------------------------------------------
+    STREAMLIT_LOG_file = STREAMLIT_LOG.open("w", encoding="utf-8", buffering=1)
     streamlit_proc = subprocess.Popen(
         [
             "streamlit",
@@ -852,8 +858,8 @@ def main() -> None:
             "--server.headless",
             "true",
         ],
-        stdout=STREAMLIT_LOG.open("w", encoding="utf-8", buffering=1),
-        stderr=STREAMLIT_LOG,
+        stdout=STREAMLIT_LOG_file,
+        stderr=subprocess.STDOUT,
         start_new_session=True,
     )
     print(f"✅  Streamlit started (PID: {streamlit_proc.pid}) – waiting…")
@@ -862,6 +868,7 @@ def main() -> None:
         sys.exit("[ERROR] Streamlit failed to start")
 
     # --- 7️⃣  Start ngrok tunnel ------------------------------------------
+    NGROK_LOG_file = NGROK_LOG.open("w", encoding="utf-8", buffering=1)
     ngrok_config = f"""version: 2
 authtoken: {os.getenv('NGROK_TOKEN')}
 tunnels:
@@ -873,8 +880,8 @@ tunnels:
 
     ngrok_proc = subprocess.Popen(
         ["ngrok", "start", "--all", "--config", "ngrok.yml", "--log", "stdout"],
-        stdout=NGROK_LOG.open("w", encoding="utf-8", buffering=1),
-        stderr=NGROK_LOG,
+        stdout=NGROK_LOG_file,
+        stderr=subprocess.STDOUT,
         start_new_session=True,
     )
     print(f"✅  ngrok started (PID: {ngrok_proc.pid}) – waiting…")
@@ -969,6 +976,12 @@ def stop() -> None:
         return
 
     print("🛑  Stopping services…")
+    llama_proc.terminate()
+    LLAMA_LOG_file.close() 
+    streamlit_proc.terminate()
+    STREAMLIT_LOG_file.close() 
+    ngrok_proc.terminate()
+    NGROK_LOG_file.close() 
     for name, pid in [
         ("llama-server", info["llama_server_pid"]),
         ("Streamlit", info["streamlit_pid"]),
