@@ -111,7 +111,7 @@ def main() -> None:
         start_new_session=True,
     )
     print(f"✅  llama-server started (PID: {llama_proc.pid}) – waiting…")
-    if not _wait_for("http://localhost:8000/health", timeout=240):
+    if not _wait_for("http://localhost:8000/health", timeout=360):
         llama_proc.terminate()
         sys.exit("[ERROR] llama-server failed to start")
 

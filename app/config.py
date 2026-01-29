@@ -9,7 +9,7 @@ Application‑wide constants.
 NGROK_URL = "http://localhost:8000"
 
 MODEL_NAME = "unsloth/gpt-oss-20b-GGUF:F16"
-DEFAULT_SYSTEM_PROMPT = "Be concise and accurate at all times"
+DEFAULT_SYSTEM_PROMPT = "Be concise and accurate at all times. When you see a request that involves creating or editing files, call the appropriate tool."
 
 # --------------------------------------------------------------------------- #
 #  GitHub repository details
