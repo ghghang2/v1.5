@@ -34,7 +34,7 @@ Application‑wide constants.
 NGROK_URL = "http://localhost:8000"
 
 MODEL_NAME = "unsloth/gpt-oss-20b-GGUF:F16"
-DEFAULT_SYSTEM_PROMPT = "Be concise and accurate at all times"
+DEFAULT_SYSTEM_PROMPT = "Be concise and accurate at all times. When you see a request that involves creating or editing files, call the appropriate tool."
 
 # --------------------------------------------------------------------------- #
 #  GitHub repository details
@@ -316,50 +316,45 @@ class RemoteClient:
                 raise
 ```
 
-## app/tools.py
+## app/tools/__init__.py
 
 ```python
-# app/tools.py
-"""
-Tool definitions for the Streamlit + OpenAI integration.
+# app/tools/__init__.py
+"""Tool registry for the Streamlit + OpenAI integration.
 
-This module now contains:
-1. `get_stock_price` – demo stock‑price lookup.
-2. `create_file`   – add a new file to the repo.
+This package contains one module per tool.  The :class:`Tool` data
+class defines the public API that the OpenAI chat completions endpoint
+expects.  ``TOOLS`` is a list of all available tools and
+``get_tools()`` returns the OpenAI‑ready format.
+
+When new tools are added, simply create a new file in this package and
+append a :class:`Tool` instance to the ``TOOLS`` list.
 """
 
 from __future__ import annotations
 
 import json
-import pathlib
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List
 
-# --------------------------------------------------------------------------- #
-#  Helper – safe path resolution
-# --------------------------------------------------------------------------- #
-def _safe_resolve(repo_root: pathlib.Path, rel_path: str) -> pathlib.Path:
-    """
-    Resolve *rel_path* against *repo_root* and ensure the result
-    does not escape the repository root (prevents directory traversal).
-    """
-    target = (repo_root / rel_path).resolve()
-    if not str(target).startswith(str(repo_root)):
-        raise ValueError("Path escapes repository root")
-    return target
-
+# Import tool implementations (they live in separate modules)
+from .get_stock_price import get_stock_price as _get_stock_price
+from .create_file import create_file as _create_file
+from .run_command import run_command as _run_command
 
 # --------------------------------------------------------------------------- #
 #  Tool dataclass
 # --------------------------------------------------------------------------- #
 @dataclass
 class Tool:
+    """Represents a tool that can be called by the OpenAI model."""
+
     name: str
     description: str
     func: Callable
-    schema: Dict[str, any] = field(init=False)
+    schema: Dict[str, Any] = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Define the JSON schema for each supported tool.
         if self.name == "get_stock_price":
             self.schema = {
@@ -391,26 +386,104 @@ class Tool:
                     "required": ["path", "content"],
                 }
             }
+        elif self.name == "run_command":
+            self.schema = {
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Shell command to execute, e.g. 'pytest -q'.",
+                        },
+                    },
+                    "required": ["command"],
+                }
+            }
         else:
             raise NotImplementedError(f"Schema for {self.name} not defined")
 
+# --------------------------------------------------------------------------- #
+#  Tool registry
+# --------------------------------------------------------------------------- #
+TOOLS: List[Tool] = [
+    Tool(
+        name="get_stock_price",
+        description="Get the current stock price for a ticker",
+        func=_get_stock_price,
+    ),
+    Tool(
+        name="create_file",
+        description="Create a new file at the given path with the supplied content",
+        func=_create_file,
+    ),
+    Tool(
+        name="run_command",
+        description="Execute a shell command and return its output, return code and stderr",
+        func=_run_command,
+    ),
+]
 
 # --------------------------------------------------------------------------- #
-#  Existing tool – get_stock_price
+#  Helper – expose OpenAI‑ready tool list
 # --------------------------------------------------------------------------- #
-def get_stock_price(ticker: str) -> str:
+def get_tools() -> List[Dict]:
+    """Return the list of tools formatted for the OpenAI API."""
+    api_tools: List[Dict] = []
+    for t in TOOLS:
+        api_tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.schema["parameters"],
+                },
+            }
+        )
+    return api_tools
+
+# --------------------------------------------------------------------------- #
+#  Convenience for quick introspection in the REPL
+# --------------------------------------------------------------------------- #
+if __name__ == "__main__":
+    print(json.dumps(get_tools(), indent=2))
+"""
+
+```
+
+## app/tools/create_file.py
+
+```python
+# app/tools/create_file.py
+"""
+Tool that creates a new file under the repository root.
+
+The function validates the target path so that it cannot escape the
+repository root (prevents directory traversal).  It creates any missing
+parent directories, writes the supplied content, and returns a JSON
+string containing either a `result` key (success) or an `error` key
+(failure).
+
+The JSON format is compatible with the OpenAI function‑calling schema
+used by the chat UI.
+"""
+
+import json
+import pathlib
+from typing import Dict
+
+
+def _safe_resolve(repo_root: pathlib.Path, rel_path: str) -> pathlib.Path:
     """
-    Demo function that returns a mock stock price.
-    The real implementation can query a live API.
+    Resolve *rel_path* against *repo_root* and ensure the result
+    does not escape the repository root (prevents directory traversal).
     """
-    sample_data = {"AAPL": 24, "GOOGL": 178.20, "NVDA": 580.12}
-    price = sample_data.get(ticker.upper(), "unknown")
-    return json.dumps({"ticker": ticker.upper(), "price": price})
+    target = (repo_root / rel_path).resolve()
+    if not str(target).startswith(str(repo_root)):
+        raise ValueError("Path escapes repository root")
+    return target
 
 
-# --------------------------------------------------------------------------- #
-#  New tool – create_file
-# --------------------------------------------------------------------------- #
 def create_file(path: str, content: str) -> str:
     """
     Create a new file at *path* (relative to the repo root) with the supplied
@@ -431,45 +504,138 @@ def create_file(path: str, content: str) -> str:
     except Exception as exc:
         return json.dumps({"error": str(exc)})
 
+# --------------------------------------------------------------------------- #
+#  Export the tool as part of the public API
+# --------------------------------------------------------------------------- #
+__all__ = ["create_file"]
 
-# --------------------------------------------------------------------------- #
-#  Register the tools
-# --------------------------------------------------------------------------- #
-TOOLS: List[Tool] = [
-    Tool(
-        name="get_stock_price",
-        description="Get the current stock price for a ticker",
-        func=get_stock_price,
-    ),
-    Tool(
-        name="create_file",
-        description="Create a new file at the given path with the supplied content",
-        func=create_file,
-    ),
-]
+```
+
+## app/tools/get_stock_price.py
+
+```python
+# app/tools/get_stock_price.py
+"""
+Tool that returns a mock stock price.
+
+The function simulates a price lookup for a given ticker.  It is used
+by the Streamlit UI to demonstrate the function‑calling API.  The
+implementation is intentionally simple – a hard‑coded dictionary of
+sample prices – but the interface mirrors a real API call.
+"""
+
+import json
+from typing import Dict
+
+# Hard‑coded sample data – in a real system this would query a
+# finance API such as Yahoo Finance or Alpha Vantage.
+_SAMPLE_PRICES: Dict[str, float] = {
+    "AAPL": 170.23,
+    "GOOGL": 2819.35,
+    "MSFT": 299.79,
+    "AMZN": 3459.88,
+    "NVDA": 568.42,
+}
 
 
-# --------------------------------------------------------------------------- #
-#  Helper – expose OpenAI‑ready tool list
-# --------------------------------------------------------------------------- #
-def get_tools() -> List[Dict]:
+def get_stock_price(ticker: str) -> str:
+    """Return the current stock price for *ticker*.
+
+    Parameters
+    ----------
+    ticker:
+        Stock symbol (e.g. ``"AAPL"``).  The lookup is case‑insensitive.
+
+    Returns
+    -------
+    str
+        JSON string containing ``ticker`` and ``price`` keys.  If the
+        ticker is unknown, ``price`` is set to ``"unknown"``.
     """
-    Return a list of tool definitions formatted for the OpenAI API.
-    Each element includes the required `"type": "function"` wrapper.
+    price = _SAMPLE_PRICES.get(ticker.upper(), "unknown")
+    result = {"ticker": ticker.upper(), "price": price}
+    return json.dumps(result)
+
+# ---------------------------------------------------------------------------
+#  Export the tool as part of the public API
+# ---------------------------------------------------------------------------
+__all__ = ["get_stock_price"]
+
+```
+
+## app/tools/run_command.py
+
+```python
+# app/tools/run_command.py
+"""
+Tool that executes a shell command and returns its output.
+
+The tool is safe for the repository root – it does not allow changing
+directories or writing files outside the repo.  The command is run
+through a subprocess with `shell=True` so that the user can use shell
+syntax (e.g. pipes, redirection).  The tool captures stdout, stderr and
+the exit code, and returns a JSON string that the model can consume.
+
+The function is intentionally minimal to avoid accidental side‑effects.
+"""
+
+import json
+import subprocess
+import pathlib
+from typing import Dict
+
+
+def _safe_resolve(repo_root: pathlib.Path, rel_path: str) -> pathlib.Path:
     """
-    api_tools = []
-    for t in TOOLS:
-        api_tools.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": t.name,
-                    "description": t.description,
-                    "parameters": t.schema["parameters"],
-                },
-            }
+    Resolve *rel_path* against *repo_root* and ensure the result
+    does not escape the repository root (prevents directory traversal).
+    """
+    target = (repo_root / rel_path).resolve()
+    if not str(target).startswith(str(repo_root)):
+        raise ValueError("Path escapes repository root")
+    return target
+
+
+def run_command(command: str, cwd: str | None = None) -> str:
+    """
+    Execute *command* in the repository root (or a sub‑directory if
+    *cwd* is provided) and return a JSON string with:
+        * stdout
+        * stderr
+        * exit_code
+    Any exception is converted to an error JSON.
+    """
+    try:
+        repo_root = pathlib.Path(__file__).resolve().parent.parent
+        if cwd:
+            target_dir = _safe_resolve(repo_root, cwd)
+        else:
+            target_dir = repo_root
+
+        # Run the command
+        proc = subprocess.run(
+            command,
+            shell=True,
+            cwd=str(target_dir),
+            capture_output=True,
+            text=True,
         )
-    return api_tools
+        result: Dict[str, str | int] = {
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "exit_code": proc.returncode,
+        }
+        return json.dumps(result)
+
+    except Exception as exc:
+        # Return a JSON with an error key
+        return json.dumps({"error": str(exc)})
+
+# --------------------------------------------------------------------------- #
+#  Export the tool as part of the public API
+# --------------------------------------------------------------------------- #
+__all__ = ["run_command"]
+
 ```
 
 ## app/utils.py
@@ -1139,5 +1305,90 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         main()
+```
+
+## tests/__init__.py
+
+```python
+# tests/__init__.py
+"""
+Make the repository root importable during test collection.
+"""
+
+import pathlib
+import sys
+
+# Path to the repository root (the directory that contains `app/`).
+ROOT_DIR = pathlib.Path(__file__).resolve().parent.parent
+
+# Ensure the root is first in sys.path.
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+```
+
+## tests/test_create_file_tool.py
+
+```python
+import json
+import os
+import pathlib
+
+import pytest
+
+# Import the tool directly from the package
+from app.tools import create_file
+
+@pytest.fixture
+def unique_filename(tmp_path):
+    """
+    Return a unique file name that lives under the repository root.
+    The file is removed after the test finishes.
+    """
+    fname = f"tests/tmp_{tmp_path.name}.py"
+    yield fname
+    # cleanup – the test itself creates/deletes the file, so nothing is required here
+
+
+def test_create_file_creates_file_and_returns_result(unique_filename):
+    """
+    Verify that the ``create_file`` tool:
+    * writes the given content to the correct path (relative to the repo root)
+    * returns a JSON object containing the key ``result``.
+    """
+    content = "print('hello world')"
+
+    # Call the tool
+    result_json = create_file(unique_filename, content)
+
+    # Parse the JSON result
+    result = json.loads(result_json)
+    assert "result" in result, "Expected a ``result`` key in the JSON response"
+
+    # Verify the file was created with the exact content
+    assert pathlib.Path(unique_filename).exists(), "The file was not created"
+    with open(unique_filename, encoding="utf-8") as f:
+        assert f.read() == content, "File contents do not match the supplied content"
+
+    # Clean up the file so it doesn't affect other tests
+    os.remove(unique_filename)
+
+
+def test_create_file_prevents_directory_traversal():
+    """
+    The tool must reject attempts to write outside the repository root.
+    It should return a JSON object containing an ``error`` key.
+    """
+    # Path that tries to escape the repo root
+    bad_path = "../../outside.txt"
+    content = "secret"
+
+    result_json = create_file(bad_path, content)
+    result = json.loads(result_json)
+
+    assert "error" in result, "Expected an ``error`` key for a path traversal attempt"
+    # Ensure the file was not created
+    assert not pathlib.Path(bad_path).exists(), "File was created outside the repo root"
+
 ```
 
