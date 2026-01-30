@@ -126,4 +126,3 @@ def get_tools() -> List[Dict]:
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     print(json.dumps(get_tools(), indent=2))
-"""
