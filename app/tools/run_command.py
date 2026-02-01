@@ -58,7 +58,11 @@ def _run_command(command: str, cwd: str | None = None) -> str:
     Any exception is converted to an error JSON.
     """
     try:
-        # ``app/tools`` → ``app`` → repo root
+        # ``run_command.py`` lives in ``app/tools``.
+        # The repository root is two directories above ``app``:
+        #   <repo_root>/app/tools/run_command.py
+        #   └───└───└─── run_command.py
+        # ``Path(__file__).parents[2]`` points at the repository root.
         repo_root = Path(__file__).resolve().parents[2]
         if cwd:
             target_dir = _safe_resolve(repo_root, cwd)
