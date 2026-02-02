@@ -120,7 +120,7 @@ def main() -> None:
     # Render past messages
     for user_msg, bot_msg in history:
         st.chat_message("user").markdown(user_msg)
-        st.chat_message("assistant").markdown(bot_msg)
+        st.chat_message("assistant").markdown(bot_msg, unsafe_allow_html=True)
 
     # User input
     if user_input := st.chat_input("Enter request…"):
