@@ -73,7 +73,7 @@ def build_messages(
                             },
                         }]
                     })
-        if role == 'tool':
+        elif role == 'tool':
             msgs.append({"role": role, "content": content, "tool_call_id": tool_id})
         else:
             msgs.append({"role": role, "content": content})

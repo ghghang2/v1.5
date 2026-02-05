@@ -156,11 +156,12 @@ def main() -> None:
 
             # appending reasoning to history
             history.append(("analysis", reasoning_text))
-            history.append(("assistant", assistant_text))
-
             log_message(session_id, "analysis", reasoning_text)
-            log_message(session_id, "assistant", assistant_text)
 
+            if assistant_text: # sometimes, if reasoning assistant_text comes back empty
+                history.append(("assistant", assistant_text))
+                log_message(session_id, "assistant", assistant_text)
+                
         if tool_calls and not finished:
             history = process_tool_calls(client, msgs, session_id, history, tools, tool_calls, finished, assistant_text, reasoning_text)
             

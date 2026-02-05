@@ -54,7 +54,7 @@ def log_message(session_id: str, role: str, content: str) -> None:
     session_id
         Identifier of the chat session – e.g. a user ID or a UUID.
     role
-        Either ``"user"`` or ``"assistant"``.
+        .
     content
         The raw text sent or received.
     """
@@ -73,18 +73,18 @@ def log_tool_msg(session_id: str, tool_id: str, tool_name: str, tool_args: str, 
     session_id
         Identifier of the chat session – e.g. a user ID or a UUID.
     role
-        Either ``"user"`` or ``"assistant"``.
+        .
     content
         The raw text sent or received.
     """
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
-            "INSERT INTO chat_log (session_id, role, content, tool_id, tool_name, tool_args) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO chat_log (session_id, role, content, tool_id, tool_name, tool_args) VALUES (?, ?, ?, ?, ?, ?)",
             (session_id, 'assistant', '', tool_id, tool_name, tool_args),
         )
         conn.execute(
-            "INSERT INTO chat_log (session_id, role, content) VALUES (?, ?, ?)",
-            (session_id, 'tool', content),
+            "INSERT INTO chat_log (session_id, role, content, tool_id) VALUES (?, ?, ?, ?)",
+            (session_id, 'tool', content, tool_id),
         )
         conn.commit()
 
