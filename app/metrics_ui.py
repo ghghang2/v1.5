@@ -54,8 +54,9 @@ def display_metrics_panel() -> None:
     metrics = get_llama_metrics(base_url)
 
     if metrics:
-        for k, v in metrics.items():
-            st.metric(label=k, value=v)
+        
+        st.metric(label="processing", value=metrics['llamacpp:requests_processing'])
+        st.metric(label="tps", value=metrics['llamacpp:predicted_tokens_seconds'])
         st.write(f"Updated: {time.strftime('%H:%M:%S')}")
     else:
         placeholder.info("No metrics returned from server.")
