@@ -117,6 +117,11 @@ def stream_and_collect(
             break
         delta = choice.delta
 
+        if "metrics_placeholder" in st.session_state:
+                st.session_state.metrics_placeholder.markdown(
+                    st.session_state.latest_metrics_md
+                )
+
         reasoning_part = delta.reasoning_content if hasattr(delta, 'reasoning_content') else None
         if reasoning_part:
             reasoning_text += reasoning_part
