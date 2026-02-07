@@ -195,32 +195,45 @@ def _equals_slice(
     return True
 
 def _find_context(lines: list[str], context: list[str], start: int, eof: bool) -> Match:
+    """Locate the context block in ``lines``.
+
+    The original implementation performed a single forward search with three
+    tiers of tolerance (exact, ignore trailing whitespace, ignore all
+    whitespace).  The reference implementation (``A``) prefers an EOF‑based
+    match when the ``eof`` flag is set.
+
+    This updated version first attempts an EOF‑based search (if ``eof`` is
+    true), then falls back to the original tiered forward search.  The
+    tiered search logic is unchanged, preserving B’s whitespace tolerance
+    while adding the EOF priority from A.
+    """
     if not context:
         return Match(start, 0)
 
-    # Tier 1: Exact Match (The Gold Standard)
-    for i in range(start, len(lines) - len(context) + 1):
-        if _equals_slice(lines, context, i, lambda v: v):
-            return Match(i, 0)
+    # Helper performing the tiered search from a given index.
+    def _search_from(idx: int) -> Match:
+        # Tier 1: Exact match.
+        for i in range(idx, len(lines) - len(context) + 1):
+            if _equals_slice(lines, context, i, lambda v: v):
+                return Match(i, 0)
+        # Tier 2: Ignore trailing whitespace.
+        for i in range(idx, len(lines) - len(context) + 1):
+            if _equals_slice(lines, context, i, lambda v: v.rstrip()):
+                return Match(i, 1)
+        # Tier 3: Ignore all whitespace.
+        for i in range(idx, len(lines) - len(context) + 1):
+            if _equals_slice(lines, context, i, lambda v: v.strip()):
+                return Match(i, 2)
+        return Match(-1, 0)
 
-    # Tier 2: Ignore Trailing Whitespace (Common LLM hallucination)
-    for i in range(start, len(lines) - len(context) + 1):
-        if _equals_slice(lines, context, i, lambda v: v.rstrip()):
-            return Match(i, 1)
-
-    # Tier 3: Ignore All Leading/Trailing Whitespace (Indentation flexible)
-    for i in range(start, len(lines) - len(context) + 1):
-        if _equals_slice(lines, context, i, lambda v: v.strip()):
-            return Match(i, 100)
-
-    # Fallback for EOF: If the model thinks it's at the end of the file
+    # If EOF is indicated, search from the end of the file first.
     if eof:
         end_start = max(0, len(lines) - len(context))
-        # Try a relaxed match at the very end of the file
-        if _equals_slice(lines, context, end_start, lambda v: v.strip()):
-            return Match(end_start, 10000)
-
-    return Match(-1, 0)
+        match = _search_from(end_start)
+        if match.new_index != -1:
+            return match
+        # If not found at EOF, continue with forward search.
+    return _search_from(start)
 
 def _apply_chunks(input_str: str, chunks: list[Chunk], newline: str) -> str:
     orig_lines = input_str.split("\n")
