@@ -132,10 +132,14 @@ def main() -> None:
 
         with st.container(border=True):
 
-            changed_files_list = changed_files()
-            status = "✅ Pushed" if not len(changed_files_list) else "⚠️ Not pushed"
-            st.markdown(f"{status}")
-            st.markdown('\n\n>' + '\n\n>'.join(changed_files_list))
+            if "push_status" not in st.session_state:
+                st.session_state.push_status = "⚠️ Not pushed"
+            if "changed_files_list" not in st.session_state:
+                st.session_state.changed_files_list = changed_files()
+
+            st.session_state.push_status = "✅ Pushed" if not len(st.session_state.changed_files_list) else "⚠️ Not pushed"
+            st.markdown(f"{st.session_state.push_status}")
+            st.markdown('\n\n>' + '\n\n>'.join(st.session_state.changed_files_list))
             
             if st.button("push to git"):
                 with st.spinner("Pushing to GitHub…"):
@@ -144,10 +148,8 @@ def main() -> None:
                         push_main()
                         st.session_state.has_pushed = True
                         st.success("✅ Repository pushed to GitHub.")
-                        changed_files_list = changed_files()
-                        status = "✅ Pushed" if not len(changed_files_list) else "⚠️ Not pushed"
-                        st.markdown(f"{status}")
-                        st.markdown('\n\n>' + '\n\n>'.join(changed_files_list))
+                        st.session_state.changed_files_list = changed_files()
+                        st.session_state.push_status = "✅ Pushed" 
                     except Exception as exc:
                         st.error(f"❌ Push failed: {exc}")
 
