@@ -94,27 +94,25 @@ def main() -> None:
 
     # Sidebar
     with st.sidebar:
-
-        if st.button("new chat", key="new_chat_btn"):
-            st.session_state.session_id = str(uuid.uuid4())
-            st.session_state.history = []
-            st.session_state.repo_docs = ""
-            st.rerun()
-
         # --- Server Status expander (new)
         display_metrics_panel()
 
         with st.container(border=True):
+            if st.button("new chat", key="new_chat_btn"):
+                st.session_state.session_id = str(uuid.uuid4())
+                st.session_state.history = []
+                st.session_state.repo_docs = ""
+                st.rerun()
             
             if st.button("push to git"):
-                with st.spinner("Pushing to GitHub…"):
+                with st.spinner("pushing..."):
                     try:
                         from app.push_to_github import main as push_main
                         push_main()
                         st.session_state.has_pushed = True
-                        st.success("✅ Repository pushed to GitHub.")
+                        st.success("✅ pushed to git")
                     except Exception as exc:
-                        st.error(f"❌ Push failed: {exc}")
+                        st.error(f"❌ push failed: {exc}")
                         
         # --- list of tools
         with st.container(border=True):
