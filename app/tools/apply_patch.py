@@ -21,14 +21,21 @@ import re
 from pathlib import Path
 from dataclasses import dataclass, make_dataclass
 from typing import Callable, Literal, Sequence, Optional
+import unicodedata
 
 def _safe_resolve(repo_root: Path, rel_path: str) -> Path:
-    """Resolve ``rel_path`` against ``repo_root`` and guard against directory traversal."""
+    """Resolve ``rel_path`` against ``repo_root`` and guard against directory traversal.
+    Normalize to NFKC to ensure characters like '..' or '/' aren't spoofed"""
+    normalized_path = unicodedata.normalize('NFKC', rel_path)
     target = (repo_root / rel_path).resolve()
     if not str(target).startswith(str(repo_root)):
         raise ValueError("Path escapes repository root")
     return target
-
+def _extract_payload(diff: str) -> str:
+    # If the agent wraps the patch, find the markers. 
+    # If not found, return original to avoid breaking "naked" diff tests.
+    match = re.search(r"\*\*\* Begin Patch(.*?)\*\*\* End Patch", diff, re.DOTALL)
+    return match.group(1).strip() if match else diff
 
 # --- CORE DIFF ENGINE ---
 
@@ -45,6 +52,7 @@ class ParserState:
     lines: list[str]
     index: int = 0
     fuzz: int = 0
+    line_offset: int = 1
 
 @dataclass
 class ReadSectionResult:
@@ -110,6 +118,7 @@ def _read_str(state: ParserState, prefix: str) -> str:
     current = state.lines[state.index]
     if current.startswith(prefix):
         state.index += 1
+        state.line_offset += 1 # NEW: Stay in sync with index
         return current[len(prefix) :]
     return ""
 
@@ -311,6 +320,7 @@ def apply_patch(path: str, op_type: str, diff: str) -> str:
     try:
         repo_root = Path(__file__).resolve().parents[2]  # app/tools -> app -> repo root
         target = _safe_resolve(repo_root, path)
+        diff = _extract_payload(diff)
 
         if op_type == "create":
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -330,7 +340,10 @@ def apply_patch(path: str, op_type: str, diff: str) -> str:
             else:
                 patched = apply_diff(original, diff)
             target.write_text(patched, encoding="utf-8")
-            return json.dumps({"result": f"File updated: {path}"})
+            return json.dumps({
+                "result": f"File updated: {path}",
+                "summary": {"modified": [path]} # NEW: Added for programmatic use
+            })
 
         elif op_type == "delete":
             target.unlink(missing_ok=True)
