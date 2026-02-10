@@ -44,6 +44,7 @@ def build_messages(
     history: Any,
     system_prompt: str,
     user_input: Optional[str] = None,
+    max_context_tokens: int = 60000,
 ) -> List[Dict[str, Any]]:
     """Return the list of messages to send to the chat model.
 
@@ -57,7 +58,64 @@ def build_messages(
     user_input
         The new user message that will trigger the assistant reply.
     """
-    msgs: List[Dict[str, Any]] = [{"role": "system", "content": str(system_prompt)}]
+    # Estimate token usage of the conversation.  The OpenAI tokenizer is
+    # complex, but for a quick heuristic we treat each word as ~4 tokens
+    # (roughly the average for English).  This keeps us well below the
+    # 64k token limit while still preserving recent context.
+    def estimate_tokens(text: str) -> int:
+        # Rough estimate: 1 token per 2 words, which is conservative for
+        # English.  The goal is simply to keep the total below the
+        # hard 64k token limit.
+        return max(1, len(text.split())) * 2
+
+    total_tokens = estimate_tokens(system_prompt)
+    # Build a list of messages first to allow trimming.
+    raw_msgs: List[Dict[str, Any]] = [{"role": "system", "content": str(system_prompt)}]
+    for role, content, tool_id, tool_name, tool_args in history:
+        if tool_name:
+            raw_msgs.append(
+                {
+                    "role": role,
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": tool_id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "arguments": tool_args or "{}",
+                            },
+                        }
+                    ],
+                }
+            )
+        elif role == "tool":
+            raw_msgs.append({"role": role, "content": content, "tool_call_id": tool_id})
+        else:
+            raw_msgs.append({"role": role, "content": content})
+
+        # Update token estimate for this message
+        if role != "tool":
+            total_tokens += estimate_tokens(content)
+        else:
+            total_tokens += estimate_tokens(content)
+    if user_input is not None:
+        raw_msgs.append({"role": "user", "content": str(user_input)})
+        total_tokens += estimate_tokens(user_input)
+
+    # If we still exceed the limit, drop the oldest non-system messages until
+    # we are within the limit or only the system message remains.
+    while total_tokens > max_context_tokens and len(raw_msgs) > 1:
+        removed = raw_msgs.pop(1)
+        content = removed.get("content", "")
+        total_tokens -= estimate_tokens(content)
+
+    # Additionally, cap the number of messages to avoid very long histories
+    # that could still push the token count close to the limit.
+    if len(raw_msgs) > 30:
+        # keep system + last 29 user/assistant entries
+        raw_msgs = [raw_msgs[0]] + raw_msgs[-29:]
+    msgs = raw_msgs
 
     for role, content, tool_id, tool_name, tool_args in history:
         if tool_name:
@@ -231,7 +289,7 @@ def process_tool_calls(
                             result = future.result(timeout=timeout_sec)
                         except concurrent.futures.TimeoutError:  # pragma: no cover
                             result = (
-                                "\u26d4  Tool call timed out after 60 seconds. "
+                                f"\u26d4  Tool call timed out after {timeout_sec} seconds. "
                                 "Try a shorter or more specific request."
                             )
                         except Exception as exc:  # pragma: no cover
