@@ -128,6 +128,8 @@ def _parse_create_diff(lines: list[str], newline: str) -> str:
     while not _is_done(parser, SECTION_TERMINATORS):
         line = parser.lines[parser.index]
         parser.index += 1
+        if line.startswith("@@"):
+            continue
         if not line.startswith("+"): raise ValueError(f"Invalid Add Line: {line}")
         output.append(line[1:])
     return newline.join(output)
