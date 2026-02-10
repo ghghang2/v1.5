@@ -191,24 +191,77 @@ class BrowserManager:
 _mgr: BrowserManager | None = None
 
 def browser(action: str, *, url: str | None = None, path: str | None = None, selector: str | None = None, text: str | None = None, headless: bool | None = None, user_data_dir: str | None = None, proxy: str | None = None, timeout: int | None = None, **kwargs) -> str:
-    """Perform a browser action.
+    """Perform a browser action using Playwright.
 
-    Parameters
-    ----------
-    action:
-        One of ``start``, ``stop``, ``navigate``, ``screenshot``, ``click`` or ``type``.
-    url:
-        Target URL for navigation.
-    path:
-        File path for screenshots.
-    selector:
-        CSS selector for click or type actions.
-    text:
-        Text to type.
-    headless, user_data_dir, proxy:
-        Browser configuration used only on ``start``.
-    timeout:
-        Navigation timeout in ms.
+    This function is designed for OpenAI function calling.  The caller
+    passes an ``action`` keyword that determines which operation to
+    perform.  All other keyword arguments are interpreted based on the
+    chosen action.
+
+    Supported actions and their required/optional parameters:
+
+    ``start``
+        Initialise a new Firefox browser instance.
+        Parameters:
+            * ``headless`` (bool, optional) – Run the browser headlessly.
+            * ``user_data_dir`` (str, optional) – Path to a persistent user
+              data directory.
+            * ``proxy`` (str, optional) – Proxy URL in the form
+              ``http://host:port``.
+
+    ``stop``
+        Close the current browser session.
+
+    ``navigate``
+        Navigate to a URL.
+        Parameters:
+            * ``url`` (str, required) – Target URL.
+            * ``timeout`` (int, optional) – Navigation timeout in milliseconds
+              (default 30 000 ms).
+
+    ``wait_for``
+        Wait for a selector to appear or for the page to become idle.
+        Parameters:
+            * ``selector`` (str, optional) – CSS selector to wait for.
+            * ``timeout`` (int, optional) – Timeout in ms.
+
+    ``extract``
+        Retrieve text, HTML or an attribute from matched elements.
+        Parameters:
+            * ``selector`` (str, required) – CSS selector.
+            * ``mode`` (str, optional) – ``text`` (default), ``html`` or
+              ``attribute``.
+            * ``multiple`` (bool, optional) – Return a list of all matches.
+            * ``attr`` (str, optional) – Attribute name when ``mode`` is
+              ``attribute``.
+
+    ``evaluate``
+        Execute arbitrary JavaScript in the page context.
+        Parameters:
+            * ``script`` (str, required) – JavaScript source.
+            * ``args`` (list, optional) – Arguments to pass to the script.
+
+    ``screenshot``
+        Capture a screenshot of the current page.
+        Parameters:
+            * ``path`` (str, required) – File path to save the image.
+            * ``full_page`` (bool, optional) – Capture the full scrollable
+              page (default ``True``).
+
+    ``click``
+        Click an element identified by a CSS selector.
+        Parameters:
+            * ``selector`` (str, required) – CSS selector.
+
+    ``type``
+        Type text into an input field.
+        Parameters:
+            * ``selector`` (str, required) – CSS selector.
+            * ``text`` (str, required) – Text to type.
+
+    The function returns a JSON string containing either a ``result``
+    object or an ``error`` message.  All internal exceptions are caught
+    and converted to an error JSON payload.
     """
     global _mgr
     try:
