@@ -14,11 +14,11 @@ Each phase contains concrete, incremental tasks and the tools we will use.
 
 ---
 
-## Phase 1 – Environment & Tooling Setup (Completed)
+## Phase 1 – Environment & Tooling Setup
 
 | Step | Action | Tool | Notes |
 |------|--------|------|-------|
-| 1.1 | Add `uvicorn` as ASGI server for async components. | | |
+| 1.1 | Add `uvicorn` as ASGI server for async components. | | All library installed with pip|
 | 1.2 | Verify `llama-server` is reachable via a test curl or python request. | | Create a simple `tests/test_llama.py` to hit `/v1/chat/completions`. |
 | 1.3 | Set up basic project structure: `app/`, `app/tools/`, `tests/`. | | Already in repo. |
 
