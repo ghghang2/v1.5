@@ -91,11 +91,24 @@ class AgentProcess(Process):
             self._handle_chat(session_id, prompt)
 
     def _handle_chat(self, session_id: str, prompt: str) -> None:
-        """Send prompt to LLM and stream tokens back via outbound queue."""
+        """Send prompt to LLM and stream tokens back via outbound queue.
+
+        The real :class:`app.llama_client.LlamaClient` exposes a ``chat``
+        coroutine that yields tokens.  The tests patch ``LlamaClient`` with
+        a dummy implementation that provides a ``stream_chat`` method.
+        To remain compatible with both the production client and the
+        test double we first try ``stream_chat`` and fall back to ``chat``.
+        """
+
         async def _stream():
             if self.client is None:
                 raise RuntimeError("LLM client not initialized")
-            async for token in self.client.stream_chat(prompt):
+            # Prefer ``stream_chat`` if present – this is what the test
+            # double provides.  Otherwise fall back to ``chat``.
+            stream_fn = getattr(self.client, "stream_chat", None) or getattr(self.client, "chat", None)
+            if stream_fn is None:
+                raise RuntimeError("LLM client lacks streaming interface")
+            async for token in stream_fn(prompt):
                 payload = {
                     "type": "token",
                     "session_id": session_id,
