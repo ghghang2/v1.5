@@ -38,7 +38,7 @@ Think step‑by‑step before using tools, especially for complex tasks.
 #  GitHub repository details
 # --------------------------------------------------------------------------- #
 USER_NAME = "ghghang2"
-REPO_NAME = "v1.2"
+REPO_NAME = "v1.3"
 
 # --------------------------------------------------------------------------- #
 #  Items to ignore in the repo
