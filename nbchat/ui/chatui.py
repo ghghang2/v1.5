@@ -90,31 +90,30 @@ class ChatUI:
             self.tools_output,
             widgets.HTML("<hr>"),
             self.session_dropdown,
-        ], layout=widgets.Layout(width="15%", border="1px solid lightgray", padding="2px"))
+        ], layout=widgets.Layout(width="15%", border="1px solid lightgray"))
 
         # ----- Main area -----
         self.chat_history = widgets.VBox(
             [],
             layout=widgets.Layout(
                 width="100%",
-                height="400px",
+                height="100%",
+                max_height="800px",
                 overflow_y="auto",
                 border="1px solid #ccc",
-                padding="0px"  # reduced padding
             )
         )
 
         # Use a Textarea instead of Text to enable word wrapping and multiline input.
         self.input_text = widgets.Textarea(
             placeholder="...",
-            layout=widgets.Layout(width="90%", height="80px"),
+            layout=widgets.Layout(width="90%", min_height="50px", height="auto"),
             rows=2,
-            # The Textarea widget automatically wraps text.
         )
         self.send_btn = widgets.Button(
             description="Send",
             button_style="success",
-            layout=widgets.Layout(width="5%", margin_left="1%")
+            layout=widgets.Layout(width="5%", padding="0", margin="0")
         )
         self.input_box = widgets.HBox([self.input_text, self.send_btn])
 
