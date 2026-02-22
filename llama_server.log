@@ -4023,3 +4023,163 @@ slot update_slots: id  0 | task 51020 | n_tokens = 26624, memory_seq_rm [26624, 
 slot update_slots: id  0 | task 51020 | prompt processing progress, n_tokens = 28672, batch.n_tokens = 2048, progress = 0.915307
 slot update_slots: id  0 | task 51020 | n_tokens = 28672, memory_seq_rm [28672, end)
 slot update_slots: id  0 | task 51020 | prompt processing progress, n_tokens = 30720, batch.n_tokens = 2048, progress = 0.980686
+slot update_slots: id  0 | task 51020 | n_tokens = 30720, memory_seq_rm [30720, end)
+slot update_slots: id  0 | task 51020 | prompt processing progress, n_tokens = 31261, batch.n_tokens = 541, progress = 0.997957
+slot update_slots: id  1 | task 51028 | new prompt, n_ctx_slot = 56064, n_keep = 0, task.n_tokens = 887
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 27577, pos_max = 28513, n_swa = 128, size = 21.972 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 28160, pos_max = 29159, n_swa = 128, size = 23.449 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 28406, pos_max = 29376, n_swa = 128, size = 22.769 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 28495, pos_max = 29475, n_swa = 128, size = 23.004 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 28724, pos_max = 29747, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 30405, pos_max = 31428, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 30527, pos_max = 31532, n_swa = 128, size = 23.590 MiB)
+slot update_slots: id  1 | task 51028 | erased invalidated context checkpoint (pos_min = 30688, pos_max = 31709, n_swa = 128, size = 23.965 MiB)
+slot update_slots: id  1 | task 51028 | n_tokens = 0, memory_seq_rm [0, end)
+slot update_slots: id  1 | task 51028 | prompt processing progress, n_tokens = 823, batch.n_tokens = 1364, progress = 0.927847
+slot update_slots: id  2 | task 51018 | n_tokens = 2048, memory_seq_rm [2048, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 2732, batch.n_tokens = 2048, progress = 0.087231
+slot update_slots: id  0 | task 51020 | n_tokens = 31261, memory_seq_rm [31261, end)
+slot update_slots: id  0 | task 51020 | prompt processing progress, n_tokens = 31325, batch.n_tokens = 64, progress = 1.000000
+slot update_slots: id  0 | task 51020 | prompt done, n_tokens = 31325, batch.n_tokens = 64
+slot init_sampler: id  0 | task 51020 | init sampler, took 4.30 ms, tokens: text = 31325, total = 31325
+slot update_slots: id  0 | task 51020 | created context checkpoint 1 of 8 (pos_min = 31134, pos_max = 31260, size = 2.978 MiB)
+slot update_slots: id  1 | task 51028 | n_tokens = 823, memory_seq_rm [823, end)
+slot update_slots: id  1 | task 51028 | prompt processing progress, n_tokens = 887, batch.n_tokens = 128, progress = 1.000000
+slot update_slots: id  1 | task 51028 | prompt done, n_tokens = 887, batch.n_tokens = 128
+slot init_sampler: id  1 | task 51028 | init sampler, took 0.13 ms, tokens: text = 887, total = 887
+slot update_slots: id  1 | task 51028 | created context checkpoint 1 of 8 (pos_min = 696, pos_max = 822, size = 2.978 MiB)
+slot update_slots: id  2 | task 51018 | n_tokens = 2732, memory_seq_rm [2732, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 4652, batch.n_tokens = 2048, progress = 0.148536
+slot update_slots: id  2 | task 51018 | n_tokens = 4652, memory_seq_rm [4652, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 6698, batch.n_tokens = 2048, progress = 0.213864
+slot update_slots: id  2 | task 51018 | n_tokens = 6698, memory_seq_rm [6698, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 8744, batch.n_tokens = 2048, progress = 0.279192
+slot update_slots: id  2 | task 51018 | n_tokens = 8744, memory_seq_rm [8744, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 10790, batch.n_tokens = 2048, progress = 0.344519
+slot update_slots: id  2 | task 51018 | n_tokens = 10790, memory_seq_rm [10790, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 12836, batch.n_tokens = 2048, progress = 0.409847
+slot update_slots: id  2 | task 51018 | n_tokens = 12836, memory_seq_rm [12836, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 14882, batch.n_tokens = 2048, progress = 0.475175
+slot update_slots: id  2 | task 51018 | n_tokens = 14882, memory_seq_rm [14882, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 16928, batch.n_tokens = 2048, progress = 0.540503
+slot update_slots: id  2 | task 51018 | n_tokens = 16928, memory_seq_rm [16928, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 18974, batch.n_tokens = 2048, progress = 0.605830
+slot update_slots: id  2 | task 51018 | n_tokens = 18974, memory_seq_rm [18974, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 21020, batch.n_tokens = 2048, progress = 0.671158
+slot update_slots: id  2 | task 51018 | n_tokens = 21020, memory_seq_rm [21020, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 23066, batch.n_tokens = 2048, progress = 0.736486
+slot update_slots: id  2 | task 51018 | n_tokens = 23066, memory_seq_rm [23066, end)
+slot update_slots: id  2 | task 51018 | prompt processing progress, n_tokens = 25112, batch.n_tokens = 2048, progress = 0.801814
+decode: failed to find a memory slot for batch of size 2048
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 0, n_batch = 1024, ret = 1
+decode: failed to find a memory slot for batch of size 1024
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 0, n_batch = 512, ret = 1
+decode: failed to find a memory slot for batch of size 1536
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 512, n_batch = 1024, ret = 1
+decode: failed to find a memory slot for batch of size 1024
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 512, n_batch = 512, ret = 1
+decode: failed to find a memory slot for batch of size 512
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 512, n_batch = 256, ret = 1
+decode: failed to find a memory slot for batch of size 1280
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 1024, ret = 1
+decode: failed to find a memory slot for batch of size 1024
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 512, ret = 1
+decode: failed to find a memory slot for batch of size 512
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 256, ret = 1
+decode: failed to find a memory slot for batch of size 256
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 128, ret = 1
+decode: failed to find a memory slot for batch of size 128
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 64, ret = 1
+decode: failed to find a memory slot for batch of size 64
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 32, ret = 1
+decode: failed to find a memory slot for batch of size 32
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 16, ret = 1
+decode: failed to find a memory slot for batch of size 16
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 8, ret = 1
+decode: failed to find a memory slot for batch of size 8
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 4, ret = 1
+decode: failed to find a memory slot for batch of size 4
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 2, ret = 1
+decode: failed to find a memory slot for batch of size 2
+srv  update_slots: failed to find free space in the KV cache, retrying with smaller batch size, i = 768, n_batch = 1, ret = 1
+decode: failed to find a memory slot for batch of size 1
+srv  update_slots: Context size has been exceeded. i = 768, n_batch = 1, ret = 1
+srv    send_error: task id = 51020, error: Context size has been exceeded.
+srv          stop: cancel task, id_task = 51020
+slot      release: id  0 | task 51020 | stop processing: n_tokens = 31335, truncated = 0
+slot prompt_clear: id  0 | task -1 | clearing prompt with 31335 tokens
+srv  log_server_r: request: POST /v1/chat/completions 127.0.0.1 200
+srv    send_error: task id = 51028, error: Context size has been exceeded.
+srv          stop: cancel task, id_task = 51028
+slot      release: id  1 | task 51028 | stop processing: n_tokens = 897, truncated = 0
+slot prompt_clear: id  1 | task -1 | clearing prompt with 897 tokens
+srv  log_server_r: request: POST /v1/chat/completions 127.0.0.1 200
+srv    send_error: task id = 51018, error: Context size has been exceeded.
+slot      release: id  2 | task 51018 | stop processing: n_tokens = 25112, truncated = 0
+slot prompt_clear: id  2 | task -1 | clearing prompt with 25112 tokens
+srv          stop: cancel task, id_task = 51018
+srv  log_server_r: request: POST /v1/chat/completions 127.0.0.1 500
+srv  update_slots: all slots are idle
+srv  params_from_: Chat format: GPT-OSS
+slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = 10138101547
+slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  3 | task 51052 | processing task, is_child = 0
+slot update_slots: id  3 | task 51052 | new prompt, n_ctx_slot = 56064, n_keep = 0, task.n_tokens = 31319
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 19129, pos_max = 20152, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 19920, pos_max = 20943, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 20562, pos_max = 21585, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 22612, pos_max = 23635, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 23393, pos_max = 24416, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 24062, pos_max = 25085, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 25722, pos_max = 26745, n_swa = 128, size = 24.012 MiB)
+slot update_slots: id  3 | task 51052 | erased invalidated context checkpoint (pos_min = 25828, pos_max = 26824, n_swa = 128, size = 23.379 MiB)
+slot update_slots: id  3 | task 51052 | n_tokens = 0, memory_seq_rm [0, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 2048, batch.n_tokens = 2048, progress = 0.065392
+slot update_slots: id  3 | task 51052 | n_tokens = 2048, memory_seq_rm [2048, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 4096, batch.n_tokens = 2048, progress = 0.130783
+slot update_slots: id  3 | task 51052 | n_tokens = 4096, memory_seq_rm [4096, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 6144, batch.n_tokens = 2048, progress = 0.196175
+slot update_slots: id  3 | task 51052 | n_tokens = 6144, memory_seq_rm [6144, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 8192, batch.n_tokens = 2048, progress = 0.261566
+slot update_slots: id  3 | task 51052 | n_tokens = 8192, memory_seq_rm [8192, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 10240, batch.n_tokens = 2048, progress = 0.326958
+slot update_slots: id  3 | task 51052 | n_tokens = 10240, memory_seq_rm [10240, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 12288, batch.n_tokens = 2048, progress = 0.392350
+slot update_slots: id  3 | task 51052 | n_tokens = 12288, memory_seq_rm [12288, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 14336, batch.n_tokens = 2048, progress = 0.457741
+slot update_slots: id  3 | task 51052 | n_tokens = 14336, memory_seq_rm [14336, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 16384, batch.n_tokens = 2048, progress = 0.523133
+slot update_slots: id  3 | task 51052 | n_tokens = 16384, memory_seq_rm [16384, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 18432, batch.n_tokens = 2048, progress = 0.588525
+slot update_slots: id  3 | task 51052 | n_tokens = 18432, memory_seq_rm [18432, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 20480, batch.n_tokens = 2048, progress = 0.653916
+slot update_slots: id  3 | task 51052 | n_tokens = 20480, memory_seq_rm [20480, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 22528, batch.n_tokens = 2048, progress = 0.719308
+slot update_slots: id  3 | task 51052 | n_tokens = 22528, memory_seq_rm [22528, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 24576, batch.n_tokens = 2048, progress = 0.784699
+srv  params_from_: Chat format: GPT-OSS
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 10223073382
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 51065 | processing task, is_child = 0
+slot update_slots: id  0 | task 51065 | new prompt, n_ctx_slot = 56064, n_keep = 0, task.n_tokens = 887
+slot update_slots: id  0 | task 51065 | erased invalidated context checkpoint (pos_min = 31134, pos_max = 31260, n_swa = 128, size = 2.978 MiB)
+slot update_slots: id  0 | task 51065 | n_tokens = 0, memory_seq_rm [0, end)
+slot update_slots: id  0 | task 51065 | prompt processing progress, n_tokens = 823, batch.n_tokens = 823, progress = 0.927847
+slot update_slots: id  3 | task 51052 | n_tokens = 24576, memory_seq_rm [24576, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 25801, batch.n_tokens = 2048, progress = 0.823813
+slot update_slots: id  0 | task 51065 | n_tokens = 823, memory_seq_rm [823, end)
+slot update_slots: id  0 | task 51065 | prompt processing progress, n_tokens = 887, batch.n_tokens = 64, progress = 1.000000
+slot update_slots: id  0 | task 51065 | prompt done, n_tokens = 887, batch.n_tokens = 64
+slot init_sampler: id  0 | task 51065 | init sampler, took 0.17 ms, tokens: text = 887, total = 887
+slot update_slots: id  0 | task 51065 | created context checkpoint 1 of 8 (pos_min = 696, pos_max = 822, size = 2.978 MiB)
+slot update_slots: id  3 | task 51052 | n_tokens = 25801, memory_seq_rm [25801, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 27785, batch.n_tokens = 2048, progress = 0.887161
+slot update_slots: id  3 | task 51052 | n_tokens = 27785, memory_seq_rm [27785, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 29832, batch.n_tokens = 2048, progress = 0.952521
+slot update_slots: id  3 | task 51052 | n_tokens = 29832, memory_seq_rm [29832, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 31255, batch.n_tokens = 1424, progress = 0.997957
+slot update_slots: id  3 | task 51052 | n_tokens = 31255, memory_seq_rm [31255, end)
+slot update_slots: id  3 | task 51052 | prompt processing progress, n_tokens = 31319, batch.n_tokens = 65, progress = 1.000000
+slot update_slots: id  3 | task 51052 | prompt done, n_tokens = 31319, batch.n_tokens = 65
+slot init_sampler: id  3 | task 51052 | init sampler, took 4.33 ms, tokens: text = 31319, total = 31319
+slot update_slots: id  3 | task 51052 | created context checkpoint 1 of 8 (pos_min = 30358, pos_max = 31254, size = 21.034 MiB)
