@@ -60,5 +60,5 @@ IGNORED_ITEMS = [
 CONTEXT_TOKEN_THRESHOLD = 100
 TAIL_MESSAGES = 5
 SUMMARY_PROMPT = (
-    "In the most compact way possible, summarize the conversation so far, focusing on key results and guidance for next steps, if any."
+    "We need to compact the chat history up to this point to save token space. In the most compact way possible, summarize the conversation so far, focusing on key results and guidance for next steps, if any."
 )

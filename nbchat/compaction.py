@@ -76,7 +76,7 @@ class CompactionEngine:
         older = history[:tail_start]
         tail = history[tail_start:]
 
-        messages = build_messages(older, self.system_prompt)
+        messages = build_messages(older, "")
         messages.append({"role": "user", "content": self.summary_prompt})
 
         try:
@@ -84,7 +84,7 @@ class CompactionEngine:
             response = client.chat.completions.create(
                 model=self.summary_model,
                 messages=messages,
-                max_tokens=512,
+                max_tokens=1024,
             )
         except Exception as e:
             raise RuntimeError(f"Summarization failed: {e}")
