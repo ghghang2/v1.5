@@ -49,7 +49,8 @@ def _style_code(s: str) -> str:
 def _md(content: str, inline: bool = False) -> str:
     h = md_to_html(content)
     if inline:
-        h = re.sub(r"<p(?!re)[^>]*>", '<span style="margin:0;">', h)
+        # Avoid replacing <p> tags that are part of a regex pattern (e.g., "<p re...")
+        h = re.sub(r"<p(?!\\s*re)[^>]*>", '<span style="margin:0;">', h)
         h = h.replace("</p>", "</span>")
     else:
         h = re.sub(r"<p(?!re)[^>]*>", '<p style="margin:0;">', h)

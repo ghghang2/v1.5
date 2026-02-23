@@ -11,3 +11,5 @@ fastapi
 pytest
 pyngrok
 markdown
+ipywidgets
+IPython

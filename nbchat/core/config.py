@@ -2,7 +2,7 @@
 """
 Application‑wide constants.
 """
-from nbchat.tools.repo_overview import func
+# Unused import removed to keep namespace clean
 # --------------------------------------------------------------------------- #
 #  General settings
 # --------------------------------------------------------------------------- #

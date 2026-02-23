@@ -22,6 +22,7 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 import psutil
+import errno
 
 # --------------------------------------------------------------------------- #
 #  Constants & helpers

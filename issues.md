@@ -6,6 +6,7 @@
 *   **Issue:** API key committed in source code.
 *   **Impact:** Unauthorized API usage, potential billing fraud.
 *   **Fix:** Move to environment variable (e.g., `DEEPSEEK_API_KEY`).
+*   **Status:** Completed. API key is now fetched from `DEEPSEEK_API_KEY` env var.
 
 ## Priority: High
 
