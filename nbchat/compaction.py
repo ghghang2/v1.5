@@ -84,7 +84,7 @@ class CompactionEngine:
             response = client.chat.completions.create(
                 model=self.summary_model,
                 messages=messages,
-                max_tokens=1024,
+                max_tokens=4096,
             )
         except Exception as e:
             raise RuntimeError(f"Summarization failed: {e}")
