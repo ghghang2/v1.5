@@ -57,8 +57,8 @@ IGNORED_ITEMS = [
 # --------------------------------------------------------------------------- #
 #  Context compaction defaults
 # --------------------------------------------------------------------------- #
-CONTEXT_TOKEN_THRESHOLD = 4000
-TAIL_MESSAGES = 10
+CONTEXT_TOKEN_THRESHOLD = 18000
+TAIL_MESSAGES = 6
 SUMMARY_PROMPT = (
     "Summarize the chat history so far. Be concise."
 )
