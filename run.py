@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-run.py –  Start the llama‑server + Streamlit UI + ngrok tunnel
-and provide simple status/stop helpers.
+run.py – Start llama-server and provide simple status/stop helpers.
 
-Typical usage
--------------
+Usage
+-----
     python run.py          # start everything
     python run.py --status # inspect current state
     python run.py --stop   # terminate all services
@@ -14,165 +13,154 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import time
 import urllib.request
 from pathlib import Path
-from typing import Iterable
+
 import psutil
-import errno
 
 # --------------------------------------------------------------------------- #
-#  Constants & helpers
+#  Constants
 # --------------------------------------------------------------------------- #
-SERVICE_INFO = Path("service_info.json")
-# NGROK_LOG = Path("ngrok.log")
-# STREAMLIT_LOG = Path("streamlit.log")
-LLAMA_LOG = Path("llama_server.log")
-REPO = "ghghang2/llamacpp_t4_v1"          # repo containing the pre‑built binary
-MODEL = "unsloth/gpt-oss-20b-GGUF:F16"   # model used by llama‑server
+SERVICE_INFO  = Path("service_info.json")
+LLAMA_LOG     = Path("llama_server.log")
+REPO          = "ghghang2/llamacpp_t4_v1"
+# Q4_K_M (~12 GB) fits entirely in T4 VRAM — no CPU offload, maximum TPS.
+# Switch to Q8_0 (~21 GB) only if output quality is insufficient (will require partial CPU offload).
+MODEL         = "unsloth/gpt-oss-20b-GGUF:Q4_K_M"
+PORT          = 8000
+N_PARALLEL    = 2      # matches 1-2 simultaneous users; fewer slots = faster per-request TPS
+CTX_SIZE      = 8192   # tokens per slot; total KV mem = CTX_SIZE * N_PARALLEL. raise only if prompts need it
+N_GPU_LAYERS  = 999    # offload all layers to GPU (llama.cpp clamps to actual layer count)
 
-# Ports used by the services
-PORTS = (8000)
 
-def _run(cmd: Iterable[str] | str, *, shell: bool = False,
-          cwd: Path | None = None, capture: bool = False,
-          env: dict | None = None) -> str | None:
-    """Convenience wrapper around subprocess.run."""
-    env = env or os.environ.copy()
-    result = subprocess.run(
-        cmd,
-        shell=shell,
-        cwd=cwd,
-        env=env,
-        check=True,
-        stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    return result.stdout.strip() if capture else None
+# --------------------------------------------------------------------------- #
+#  Helpers
+# --------------------------------------------------------------------------- #
+def _run(cmd: str, *, extra_env: dict | None = None) -> None:
+    """Run a shell command, optionally merging extra environment variables."""
+    env = {**os.environ, **(extra_env or {})}
+    subprocess.run(cmd, shell=True, env=env, check=True)
+
 
 def _is_port_free(port: int) -> bool:
-    """Return True if the port is not currently bound."""
-    with subprocess.Popen(["ss", "-tuln"], stdout=subprocess.PIPE) as p:
-        return str(port) not in p.stdout.read().decode()
+    result = subprocess.run(["ss", "-tuln"], capture_output=True, text=True)
+    return str(port) not in result.stdout
 
-def _wait_for(url: str, *, timeout: int = 30, interval: float = 1.0) -> bool:
-    """Poll a URL until it returns 200 or timeout expires."""
-    for _ in range(int(timeout / interval)):
+
+def _wait_for(url: str, *, timeout: int = 360, interval: float = 1.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=5) as r:
-                return r.status == 200
+                if r.status == 200:
+                    return True
         except Exception:
             pass
         time.sleep(interval)
     return False
 
-def _save_service_info(tunnel_url: str, llama: int, streamlit: int, ngrok: int) -> None:
-    """Persist the running process IDs and the public tunnel URL."""
-    data = {
-        "tunnel_url": tunnel_url,
-        "llama_server_pid": llama,
-        "streamlit_pid": streamlit,
-        "ngrok_pid": ngrok,
+
+def _save_service_info(pid: int) -> None:
+    SERVICE_INFO.write_text(json.dumps({
+        "llama_server_pid": pid,
         "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    SERVICE_INFO.write_text(json.dumps(data, indent=2))
+    }, indent=2))
 
-# --------------------------------------------------------------------------- #
-#  Core logic – start the services
-# --------------------------------------------------------------------------- #
-def main() -> None:
-    """Start all services and record their state."""
-    # ---   Validate environment -----------------------------------------
-    if not os.getenv("GITHUB_TOKEN"):
-        sys.exit("[ERROR] GITHUB_TOKEN must be set")
 
-    # ---  Ensure ports are free ----------------------------------------
-    if not _is_port_free(PORTS):
-        sys.exit(f"[ERROR] Port {PORTS} is already in use")
-
-    # ---  Download the pre‑built llama‑server -------------------------
-    _run(
-        f"gh release download --repo {REPO} --pattern llama-server --skip-existing",
-        shell=True,
-        env={"GITHUB_TOKEN": os.getenv("GITHUB_TOKEN")},
-    )
-    _run("chmod +x ./llama-server", shell=True)
-
-    # ---  Start llama‑server ------------------------------------------
-    LLAMA_LOG_file = LLAMA_LOG.open("w", encoding="utf-8", buffering=1)
-    llama_proc = subprocess.Popen(
-            ["./llama-server", "-hf", MODEL, "--port", "8000", "--metrics"],#, "--chat-template-kwargs", '{"reasoning_effort":"high"}'
-        stdout=LLAMA_LOG_file,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
-    print(f"llama-server started (PID: {llama_proc.pid}) – waiting…")
-    if not _wait_for("http://localhost:8000/health", timeout=360):
-        llama_proc.terminate()
-        sys.exit("[ERROR] llama-server failed to start")
-
-    # --- Install required packages ----------------------------
-    print("Installing dependencies…")
-    _run("pip install -r requirements.txt -qqq", shell=True)
-    #    Install Playwright and the Firefox browser bundle.
-    #    The Playwright installation requires system libraries; install those
-    #    first via apt-get. These commands are prefixed with ``sudo`` so they
-    #    run as root, which is typical for a Docker container or a CI
-    #    environment.
-    _run("sudo apt-get update", shell=True)
-    _run(
-        "sudo apt-get install -y libxcomposite1 libgtk-3-0 libatk1.0-0",
-        shell=True,
-    )
-    # Playwright may need additional system dependencies; the --with-deps
-    # flag instructs Playwright to install them automatically.
-    _run("playwright install --with-deps firefox", shell=True)
-
-    # Persist state
-    _save_service_info("tunnel_url", llama_proc.pid, "streamlit_proc.pid", "ngrok_proc.pid")
-
-    print("\nALL SERVICES RUNNING SUCCESSFULLY!")
-    print("=" * 70)
-
-# --------------------------------------------------------------------------- #
-#  Helper commands – status and stop
-# --------------------------------------------------------------------------- #
 def _load_service_info() -> dict:
     if not SERVICE_INFO.exists():
         raise FileNotFoundError("No service_info.json found – are the services running?")
     return json.loads(SERVICE_INFO.read_text())
 
+
+def _kill_pid(name: str, pid: int) -> None:
+    """Gracefully terminate a process and its children."""
+    try:
+        proc = psutil.Process(pid)
+        for child in proc.children(recursive=True):
+            child.terminate()
+        proc.terminate()
+        print(f"{name} (PID {pid}) stopped")
+    except psutil.NoSuchProcess:
+        print(f"{name} (PID {pid}) was not running")
+    except Exception as exc:
+        print(f"Error stopping {name} (PID {pid}): {exc}")
+
+
+# --------------------------------------------------------------------------- #
+#  Commands
+# --------------------------------------------------------------------------- #
+def main() -> None:
+    if not os.getenv("GITHUB_TOKEN"):
+        sys.exit("[ERROR] GITHUB_TOKEN must be set")
+
+    if not _is_port_free(PORT):
+        sys.exit(f"[ERROR] Port {PORT} is already in use")
+
+    # Download pre-built llama-server binary
+    _run(
+        f"gh release download --repo {REPO} --pattern llama-server --skip-existing",
+        extra_env={"GITHUB_TOKEN": os.environ["GITHUB_TOKEN"]},
+    )
+    _run("chmod +x ./llama-server")
+
+    # Start llama-server
+    with LLAMA_LOG.open("w", encoding="utf-8", buffering=1) as log_file:
+        llama_proc = subprocess.Popen(
+            [
+                "./llama-server",
+                "-hf",            MODEL,
+                "--port",         str(PORT),
+                "--parallel",     str(N_PARALLEL),
+                "--ctx-size",     str(CTX_SIZE),
+                "--n-gpu-layers", str(N_GPU_LAYERS),
+                "--metrics",
+            ],
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        print(f"llama-server started (PID: {llama_proc.pid}) – waiting for health…")
+
+        if not _wait_for(f"http://localhost:{PORT}/health"):
+            llama_proc.terminate()
+            sys.exit("[ERROR] llama-server failed to start within timeout")
+
+    # Install Python dependencies
+    print("Installing Python dependencies…")
+    _run("pip install -r requirements.txt -qqq")
+
+    # Install Playwright + system deps
+    print("Installing Playwright dependencies…")
+    _run("sudo apt-get update -qq")
+    _run("sudo apt-get install -y libxcomposite1 libgtk-3-0 libatk1.0-0")
+    _run("playwright install --with-deps firefox")
+
+    _save_service_info(llama_proc.pid)
+    print("\nALL SERVICES RUNNING SUCCESSFULLY!")
+    print("=" * 60)
+    os._exit(0)  # Hard-exit so the notebook cell stops immediately
+
+
 def status() -> None:
-    """Print a quick report of the running services."""
     try:
         info = _load_service_info()
     except FileNotFoundError as exc:
         print(exc)
         return
 
-    print("\n" + "=" * 70)
-    print("SERVICE STATUS")
-    print("=" * 70)
-    print(f"Started at: {info['started_at']}")
-    print(f"llama-server PID: {info['llama_server_pid']}")
-    print("=" * 70)
+    pid = info["llama_server_pid"]
+    alive = psutil.pid_exists(pid)
+    print("=" * 60)
+    print(f"Started at : {info['started_at']}")
+    print(f"llama-server PID {pid}: {'running' if alive else 'NOT running'}")
+    print("=" * 60)
 
-    # Check if processes are alive
-    for name, pid in [
-        ("llama-server", info["llama_server_pid"]),
-    ]:
-        try:
-            os.kill(pid, 0)
-            print(f"{name} is running (PID: {pid})")
-        except OSError:
-            print(f"{name} is NOT running (PID: {pid})")
 
 def stop() -> None:
-    """Terminate all services and clean up."""
     try:
         info = _load_service_info()
     except FileNotFoundError:
@@ -180,59 +168,23 @@ def stop() -> None:
         return
 
     print("Stopping services…")
-    for name, pid in [
-        ("llama-server", info["llama_server_pid"]),
-        # ("Streamlit", info["streamlit_pid"]),
-        # ("ngrok", info["ngrok_pid"]),
-    ]:
-        try:
-            # First try a graceful terminate
-            os.killpg(pid, signal.SIGTERM)
-            print(f"Sent SIGTERM to {name} (PID {pid})")
-            try:
-                proc = psutil.Process(pid)
-                for child in proc.children(recursive=True):
-                    child.terminate()
-                proc.terminate()
-                print(f"{name} (PID {pid}) stopped (psutil)")
-            except: 
-                print(f"{name} (PID {pid}) not running (psutil)")
-
-        except OSError as exc:
-            # If the process is already dead, we’re fine
-            try:
-                if exc.errno == errno.ESRCH:
-                    print(f"{name} (PID {pid}) not running")
-                else:
-                    print(f"Error stopping {name} (PID {pid}): {exc}")
-            except: 
-                print(f"{name} (PID {pid}) not running")
-    
-    # Optionally wait a moment for processes to exit
+    _kill_pid("llama-server", info["llama_server_pid"])
     time.sleep(1)
 
-    # Clean up the service info files
-    for path in (SERVICE_INFO, Path("tunnel_url.txt")):
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
+    SERVICE_INFO.unlink(missing_ok=True)
+    print("Cleaned up service info")
 
-    print("Cleaned up service info files")
 
 # --------------------------------------------------------------------------- #
-#  CLI entry point
+#  Entry point
 # --------------------------------------------------------------------------- #
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        cmd = sys.argv[1]
-        if cmd == "--status":
-            status()
-        elif cmd == "--stop":
-            stop()
-        else:
-            print(f"Unknown command: {cmd}")
-            print("Usage: python run.py [--status|--stop]")
-            sys.exit(1)
-    else:
+    commands = {"--status": status, "--stop": stop}
+    if len(sys.argv) == 1:
         main()
+    elif sys.argv[1] in commands:
+        commands[sys.argv[1]]()
+    else:
+        print(f"Unknown command: {sys.argv[1]}")
+        print("Usage: python run.py [--status | --stop]")
+        sys.exit(1)

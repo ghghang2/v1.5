@@ -16,8 +16,11 @@ from nbchat.ui import tool_executor as executor
 from nbchat.ui import chat_builder
 from nbchat.compaction import CompactionEngine
 from nbchat.ui.utils import changed_files
-from nbchat.core.utils import lazy_import
+from nbchat.core import db, config, client
+import nbchat.tools as tools
 
+_client = client.get_client()
+_tools = tools.get_tools()
 
 class ChatUI:
     """Chat interface with streaming, reasoning, and safe tool execution."""
@@ -25,10 +28,7 @@ class ChatUI:
     MAX_TOOL_TURNS = 50
 
     def __init__(self):
-        db = lazy_import("nbchat.core.db")
         db.init_db()
-
-        config = lazy_import("nbchat.core.config")
         self.system_prompt = config.DEFAULT_SYSTEM_PROMPT
         self.model_name = config.MODEL_NAME
         self.compaction_engine = CompactionEngine(
@@ -53,7 +53,7 @@ class ChatUI:
     # Widget creation
     # ------------------------------------------------------------------
     def _create_widgets(self):
-        db = lazy_import("nbchat.core.db")
+        # use db module directly
 
         self.metrics_output = widgets.HTML(
             value="<i>Loading server status...</i>",
@@ -110,8 +110,8 @@ class ChatUI:
         self.layout = widgets.HBox([sidebar, main])
 
     def _refresh_tools_list(self):
-        tools = lazy_import("nbchat.tools")
-        names = "<br>".join(t["function"]["name"] for t in tools)
+        # use tools module directly
+        names = "<br>".join(t["function"]["name"] for t in _tools)
         self.tools_output.value = f"<b>Tools</b><br>{names}"
 
     # ------------------------------------------------------------------
@@ -163,7 +163,7 @@ class ChatUI:
     # History
     # ------------------------------------------------------------------
     def _load_history(self):
-        db = lazy_import("nbchat.core.db")
+        # use db module directly
         self.history = db.load_history(self.session_id)
         self._render_history()
 
@@ -220,7 +220,7 @@ class ChatUI:
         if not self.compaction_engine.should_compact(self.history):
             return False
 
-        db = lazy_import("nbchat.core.db")
+        # use db module directly
         import sys
 
         try:
@@ -250,7 +250,7 @@ class ChatUI:
     # Event handlers
     # ------------------------------------------------------------------
     def _on_new_chat(self, _):
-        db = lazy_import("nbchat.core.db")
+        # use db module directly
         self.session_id = str(uuid.uuid4())
         self.history = []
         options = list(db.get_session_ids())
@@ -270,7 +270,7 @@ class ChatUI:
         if not user_input:
             return
 
-        db = lazy_import("nbchat.core.db")
+        # use db module directly
 
         # Stop any running stream before starting a new one.
         if self._stream_thread and self._stream_thread.is_alive():
@@ -293,9 +293,6 @@ class ChatUI:
     # Conversation loop
     # ------------------------------------------------------------------
     def _process_conversation_turn(self):
-        client = lazy_import("nbchat.core.client")
-        tools  = lazy_import("nbchat.tools")
-        db     = lazy_import("nbchat.core.db")
 
         messages = chat_builder.build_messages(self.history, self.system_prompt)
         for msg in messages:
@@ -305,8 +302,7 @@ class ChatUI:
             if self._stop_streaming:
                 break
 
-            reasoning, content, tool_calls, finish_reason = self._stream_response(
-                client, tools, messages
+            reasoning, content, tool_calls, finish_reason = self._stream_response(messages
             )
 
             if reasoning:
@@ -360,7 +356,7 @@ class ChatUI:
     # ------------------------------------------------------------------
     # Streaming
     # ------------------------------------------------------------------
-    def _stream_response(self, client, tools, messages):
+    def _stream_response(self, messages):
         reasoning_widget = None
         assistant_widget = None
         reasoning_accum = ""
@@ -368,9 +364,9 @@ class ChatUI:
         tool_buffer: dict = {}
         finish_reason = None
 
-        stream = client.chat.completions.create(
+        stream = _client.chat.completions.create(
             model=self.model_name, messages=messages,
-            stream=True, tools=tools, max_tokens=4096,
+            stream=True, tools=_tools, max_tokens=4096,
         )
         for chunk in stream:
             if self._stop_streaming:
