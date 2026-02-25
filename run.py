@@ -145,9 +145,6 @@ def main() -> None:
     _run("sudo apt-get install -y libxcomposite1 libgtk-3-0 libatk1.0-0")
     _run("playwright install --with-deps firefox")
 
-    # Install pre-commit for guarding against git secrets
-    _run("pre-commit install")
-
     _save_service_info(llama_proc.pid)
     print("\nALL SERVICES RUNNING SUCCESSFULLY!")
     print("=" * 60)
