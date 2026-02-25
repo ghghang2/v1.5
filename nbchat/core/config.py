@@ -60,12 +60,13 @@ IGNORED_ITEMS = [
 #  Context compaction defaults
 # --------------------------------------------------------------------------- #
 CONTEXT_TOKEN_THRESHOLD = 10000
-TAIL_MESSAGES = 6
+TAIL_MESSAGES = 4
 SUMMARY_PROMPT = (
             "Summarize the conversation history above. Focus on:\n"
-            "1. Key decisions made\n"
-            "2. Important file paths and edits\n"
-            "3. Tool calls and their outcomes (summarize large outputs)\n"
-            "4. Next steps planned\n"
-            "Keep it concise but preserve essential context."
+            "1. Restating the user requests so the conversation stays on track\n"
+            "2. List major assistant outputs and work progress that progresses toward resolving user requests\n"
+            "3. All tool calls and tool outputs (in summary if output too large).\n"
+            "4. Summarize all tool call failures, note the failure reasons.\n"
+            "5. Where the conversation history leaves off at? What are next steps are?\n"
+            "You must preserve essential context to ensure user requests are satisfied."
         )

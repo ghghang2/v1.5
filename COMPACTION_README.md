@@ -1,4 +1,12 @@
 # Compaction Engine Documentation
+## Note
+The following documentation explains the behaviour and usage of the
+``CompactionEngine`` class found in ``nbchat/compaction.py``.  The
+original repository contained a patch that attempted to modify the
+``compaction.py`` file; however, the intent of this repository is to keep
+the implementation stable and to provide clear documentation.  The
+``COMPACTION_README.md`` has now been updated to reflect that the
+primary focus is documentation rather than code changes.
 
 ## 1. Introduction
 
