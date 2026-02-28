@@ -84,8 +84,10 @@ def _create_file(path: str, content: str) -> str:
             { "error": "<exception message>" }
     """
     try:
-        # ``app/tools`` → ``app`` → repo root
+        # ``app/tools`` -> ``app`` -> repository root
+        # parents[0] = file, [1] = tools, [2] = nbchat, [3] = repo root
         repo_root = Path(__file__).resolve().parents[2]
+        # Resolve target path and guard against directory traversal
         target = _safe_resolve(repo_root, path)
 
         # Ensure the parent directory exists

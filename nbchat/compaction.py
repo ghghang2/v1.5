@@ -64,14 +64,7 @@ class CompactionEngine:
                  system_prompt: str = ""):
         self.threshold = threshold
         self.tail_messages = tail_messages
-        self.summary_prompt = summary_prompt or (
-            "Summarize the conversation history above. Focus on:\n"
-            "1. Key decisions made\n"
-            "2. Important file paths and edits\n"
-            "3. Tool calls and their outcomes (summarize large outputs)\n"
-            "4. Next steps planned\n"
-            "Keep it concise but preserve essential context."
-        )
+        self.summary_prompt = summary_prompt
         self.summary_model = summary_model
         self.system_prompt = system_prompt
         self._cache: dict = {}
@@ -152,13 +145,29 @@ class CompactionEngine:
 
         tail_start = len(history) - self.tail_messages
 
-        # The ONLY safe split point is a ``user`` message — the llama.cpp
-        # Jinja template requires every ``tool`` result to be preceded by an
-        # assistant message with a tool_call, so we must never let ``tail``
-        # begin with a tool/analysis/assistant_full row.  Walking back to the
-        # nearest ``user`` row guarantees the tail starts a complete exchange.
-        while tail_start > 0 and history[tail_start][0] != "user":
+        # splitting at 'assistant' messages 
+        # that are not immediately following a tool call without a result.
+        # This allows compacting long tool-use chains.
+        while tail_start > 0:
+            role = history[tail_start][0]
+            prev_role = history[tail_start - 1][0]
+            
+            # Safe points to start the 'tail':
+            # 1. A User message (The gold standard)
+            # 2. An Assistant message, provided the previous message wasn't 
+            #    an incomplete tool call sequence.
+            if role == "user":
+                break
+            if role == "assistant" and prev_role not in ["tool", "analysis"]:
+                # This suggests a new turn or a clean break in the chain
+                break
+            
             tail_start -= 1
+            
+        # FALLBACK: If we still can't find a 'natural' boundary but we are 
+        # over threshold, we MUST split anyway to prevent context overflow.
+        if tail_start <= 0 and len(history) > self.tail_messages:
+            tail_start = len(history) - self.tail_messages
 
         if tail_start <= 0:
             print("[compaction] no user-message boundary found, skipping", file=sys.stderr)
@@ -190,6 +199,7 @@ class CompactionEngine:
             msg.pop("reasoning_content", None)
 
         # Append the summarisation instruction as a user turn.
+        messages.append({"role": "user", "content": "we are running out of context window"})
         messages.append({"role": "assistant", "content": self.summary_prompt})
 
         print(
