@@ -12,6 +12,13 @@ enter.  The result page is parsed with BeautifulSoup.
 import re
 from typing import List, Dict
 import bs4
+# Import the browser tool if available
+try:
+    from nbchat.tools.browser import browser as nb_browser  # type: ignore
+    if browser is None:
+        browser = nb_browser
+except Exception:  # pragma: no cover - optional dependency
+    pass
 
 # The browser tool is injected via the runtime environment.
 # In this repository we simply declare it as a placeholder.
@@ -44,6 +51,14 @@ def perform_search(query: str, num_results: int = 10) -> List[Dict[str, str]]:
     if browser is None:
         raise RuntimeError("browser tool not provided")
     resp = browser(url=url, selector="")
-    raw_html = resp.get("text", "") if isinstance(resp, dict) else resp
+    # browser returns JSON string; parse it to extract the raw html
+    if isinstance(resp, str):
+        try:
+            resp_dict = json.loads(resp)
+        except Exception:
+            raise RuntimeError("browser tool returned invalid JSON")
+    else:
+        resp_dict = resp
+    raw_html = resp_dict.get("text", "")
     results = _extract_results(raw_html)
     return results[:num_results]

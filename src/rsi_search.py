@@ -23,6 +23,15 @@ from typing import Dict, List
 
 # Import local modules
 from .search_engine import perform_search
+from nbchat.tools.browser import browser as nb_browser
+# Inject browser tool into search_engine if not already set
+try:
+    import importlib
+    se = importlib.import_module('src.search_engine')
+    if getattr(se, 'browser', None) is None:
+        se.browser = nb_browser
+except Exception:
+    pass
 from .classifier import classify_url
 from .harvest_arxiv import harvest_arxiv
 from .harvest_semanticscholar import harvest_semanticscholar
@@ -126,4 +135,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-"""
