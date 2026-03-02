@@ -1,5 +1,9 @@
-requests
-beautifulsoup4
-pyyaml
-tqdm
-feedparser
+playwright
+openai
+gitpython
+pygithub
+markdown
+ipywidgets
+IPython
+pytest
+psutil
