@@ -221,11 +221,21 @@ class CompactionEngine:
                         file=sys.stderr,
                     )
                 else:
+                    # No safe split – summarise the *entire* history.
                     print(
                         "[compaction] cannot split last remaining turn,"
-                        " aborting compaction",
+                        " summarising entire history instead of aborting",
                         file=sys.stderr,
                     )
+                    # Summarise all rows.
+                    self.context_summary = self._call_summariser(history)
+                    # Keep only the tail rows verbatim (if any).  This mimics
+                    # the behaviour of the original algorithm where tail
+                    # rows are never dropped.
+                    if self.tail_messages:
+                        return history[-self.tail_messages:]
+                    else:
+                        return []
                 break
 
             # If the candidate turn alone exceeds the threshold, split it

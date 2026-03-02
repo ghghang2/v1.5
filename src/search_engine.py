@@ -10,6 +10,7 @@ enter.  The result page is parsed with BeautifulSoup.
 """
 
 import re
+import json
 from typing import List, Dict
 import bs4
 # Import the browser tool if available
