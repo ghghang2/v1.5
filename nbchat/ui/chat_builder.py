@@ -56,6 +56,11 @@ def build_messages(
         elif role == "assistant_full":
             try:
                 full_msg = json.loads(tool_args)
+                # Always strip reasoning_content — it is an output-only field
+                # that the API rejects when sent back, and old DB rows may still
+                # contain it if they were written before this was enforced in
+                # conversation.py.
+                full_msg.pop("reasoning_content", None)
                 messages.append(full_msg)
             except Exception:
                 messages.append({"role": "assistant", "content": content})

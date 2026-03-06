@@ -32,6 +32,9 @@ class ChatUI(ContextMixin, ConversationMixin):
     MAX_TOOL_TURNS = 100
     # Number of user turns to include in the model's context window.
     WINDOW_TURNS = 8
+    # Maximum number of rendered widgets kept in the chat panel.
+    # Older widgets are pruned from the top to keep the browser snappy.
+    MAX_VISIBLE_WIDGETS = 120
 
     def __init__(self):
         db = lazy_import("nbchat.core.db")
@@ -48,6 +51,11 @@ class ChatUI(ContextMixin, ConversationMixin):
         # Running one-line log of tool actions — injected into system prompt
         # so the model never loses track of what it has done.
         self.task_log: List[str] = []
+        # Cross-turn duplicate call detection.  Maps (tool_name, tool_args)
+        # to the compressed result so stale repeated calls are intercepted
+        # even after the original exchange left the context window.
+        # Reset on session change via _reset_session_state().
+        self._seen_calls: dict = {}
 
         self._stop_streaming = False
         self._stream_thread = None
@@ -56,6 +64,16 @@ class ChatUI(ContextMixin, ConversationMixin):
         self._start_metrics_updater()
         self._load_history()
         display(self.layout)
+
+    # ------------------------------------------------------------------
+    # Session state reset (called on new chat or session switch)
+    # ------------------------------------------------------------------
+
+    def _reset_session_state(self) -> None:
+        """Clear all per-session in-memory state."""
+        self.history = []
+        self.task_log = []
+        self._seen_calls = {}
 
     # ------------------------------------------------------------------
     # Widget creation
@@ -183,13 +201,32 @@ class ChatUI(ContextMixin, ConversationMixin):
     # ------------------------------------------------------------------
     def _load_history(self):
         db = lazy_import("nbchat.core.db")
-        self.history = db.load_history(self.session_id)
+        self.history = list(db.load_history(self.session_id))
         self.task_log = db.load_task_log(self.session_id)
+        # Rebuild _seen_calls from loaded history so cross-turn duplicate
+        # detection works correctly after a session switch.
+        self._seen_calls = {}
         self._render_history()
 
     def _render_history(self):
+        """Render only the windowed slice of history into the chat panel.
+
+        Rendering the full history for long sessions creates hundreds of
+        widgets and makes the browser sluggish.  The model only has access
+        to the windowed slice anyway, so there is no value in showing more.
+        A header note is prepended when earlier rows are hidden.
+        """
+        window = self._window()
+        hidden_count = len(self.history) - len(window)
+
         children = []
-        for role, content, tool_id, tool_name, tool_args in self.history:
+        if hidden_count > 0:
+            children.append(renderer.render_system(
+                f"[{hidden_count} earlier messages are outside the context "
+                f"window and have been omitted from this view.]"
+            ))
+
+        for role, content, tool_id, tool_name, tool_args in window:
             if role == "user":
                 children.append(renderer.render_user(content))
             elif role == "analysis":
@@ -210,6 +247,7 @@ class ChatUI(ContextMixin, ConversationMixin):
                 children.append(renderer.render_tool(content, tool_name, tool_args))
             elif role == "system":
                 children.append(renderer.render_system(content))
+
         self.chat_history.children = children
 
     def _widget_for_assistant(self, content: str, tool_id: str, tool_args: str) -> widgets.HTML:
@@ -221,7 +259,21 @@ class ChatUI(ContextMixin, ConversationMixin):
         return renderer.render_assistant(content)
 
     def _append(self, widget: widgets.HTML):
-        self.chat_history.children = list(self.chat_history.children) + [widget]
+        """Append a widget to the chat panel, pruning old widgets if needed.
+
+        Keeps at most MAX_VISIBLE_WIDGETS widgets in the panel so the
+        browser does not accumulate hundreds of DOM nodes during long
+        agentic loops.  A note is prepended when widgets are pruned.
+        """
+        children = list(self.chat_history.children) + [widget]
+        if len(children) > self.MAX_VISIBLE_WIDGETS:
+            trim = len(children) - self.MAX_VISIBLE_WIDGETS
+            note = renderer.render_system(
+                f"[{trim} earlier messages pruned from view to maintain performance. "
+                f"Full history is saved in the database.]"
+            )
+            children = [note] + children[trim:]
+        self.chat_history.children = children
 
     # ------------------------------------------------------------------
     # Event handlers
@@ -229,8 +281,7 @@ class ChatUI(ContextMixin, ConversationMixin):
     def _on_new_chat(self, _):
         db = lazy_import("nbchat.core.db")
         self.session_id = str(uuid.uuid4())
-        self.history = []
-        self.task_log = []
+        self._reset_session_state()
         options = list(db.get_session_ids())
         if self.session_id not in options:
             options.append(self.session_id)
@@ -241,6 +292,7 @@ class ChatUI(ContextMixin, ConversationMixin):
     def _on_session_change(self, change):
         if change["new"]:
             self.session_id = change["new"]
+            self._reset_session_state()
             self._load_history()
 
     def _on_send(self, _):

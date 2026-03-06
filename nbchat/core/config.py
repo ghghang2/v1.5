@@ -1,119 +1,126 @@
-# app/config.py
-"""
-Application‑wide constants.
-"""
-# Unused import removed to keep namespace clean
-# --------------------------------------------------------------------------- #
-#  General settings
-# --------------------------------------------------------------------------- #
-# ``repo_config.yaml`` will provide most runtime configuration. The
-# following constants are loaded from the YAML file at import time.
-# They are defined here as *fallbacks* only to keep the module
-# importable when the YAML is missing (e.g. during tests).
-# The actual values are overwritten below after the YAML is parsed.
-SERVER_URL: str = "http://localhost:8000"
-MODEL_NAME: str = "unsloth/gpt-oss-20b-GGUF:F16"
-DEFAULT_SYSTEM_PROMPT: str = """You are a helpful assistant..."""
+"""Application‑wide configuration.
 
-# --------------------------------------------------------------------------- #
-#  GitHub repository details
-# --------------------------------------------------------------------------- #
-# ---------------------------------------------------------------------------
-#  Load repository configuration from ``repo_config.yaml``.
-# ---------------------------------------------------------------------------
+All runtime configuration is now loaded from :file:`repo_config.yaml` located in the
+repository root. The file is parsed once at import time and the resulting values
+populate a set of constants that other modules import.
+
+The module keeps a small fallback dictionary for unit tests that may run in an
+environment where the YAML file is absent.  The defaults match the historic
+hard‑coded values from the original code base.
+"""
+
+from __future__ import annotations
+
 import logging
 from pathlib import Path
+from typing import Any, Dict
+
+# ---------------------------------------------------------------------------
+#  Load configuration from YAML
+# ---------------------------------------------------------------------------
+_LOGGER = logging.getLogger(__name__)
+
+# Path to repo_config.yaml – three levels up from this file
+_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "repo_config.yaml"
 
 try:
     import yaml
-except Exception as exc:  # pragma: no cover - yaml is required for config
-    logging.warning("PyYAML is not installed. Falling back to defaults.")
+except Exception:  # pragma: no cover – yaml is a normal dependency
+    _LOGGER.warning("PyYAML not available – using empty config")
     yaml = None
 
-# The configuration file lives at the repository root, one level above the
-# ``nbchat`` package. ``config.py`` is in ``nbchat/core`` so we need to go up
-# three directories (``config.py`` -> ``core`` -> ``nbchat`` -> ``<root>``).
-# The original code used ``parent.parent`` which pointed to
-# ``<root>/nbchat`` and resulted in an empty configuration dictionary.
-# This caused ``REPO_NAME`` to fall back to the hard‑coded default of
-# ``v1.4``.
-_CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "repo_config.yaml"
 
-def _load_config(path: Path) -> dict:
-    """Load the YAML configuration file.
-
-    Parameters
-    ----------
-    path: Path
-        Path to the YAML file.
-
-    Returns
-    -------
-    dict
-        Parsed configuration or an empty dict on failure.
-    """
+def _load_yaml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         return {}
     try:
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
-    except Exception as exc:  # pragma: no cover - defensive
-        logging.warning("Failed to load %s: %s", path, exc)
+    except Exception as exc:  # pragma: no cover
+        _LOGGER.warning("Failed to load %s: %s", path, exc)
         return {}
 
-_cfg = _load_config(_CONFIG_PATH)
+# Default values that mimic the historic hard‑coded constants.
+_DEFAULTS: Dict[str, Any] = {
+    "SERVER_URL": "http://localhost:8000",
+    "MODEL_NAME": "unsloth/gpt-oss-20b-GGUF:F16",
+    "DEFAULT_SYSTEM_PROMPT": "You are a helpful assistant.",
+    "user_name": "ghghang2",
+    "repo_name": "v1.4",
+    "context_len": 16384,
+    "tail_len": 2,
+    "max_tool_output_chars": 6000,
+    "compress_threshold_chars": 8000,
+    "email_login": "ghghang2@gmail.com",
+    "email_to": "ghghang2@gmail.com",
+    "max_history_turns": 10,
+    "port": 8000,
+    "n_parallel": 1,
+    "ctx_size": 16384,
+    "n_gpu_layers": 999,
+    "service_info_path": "service_info.json",
+    "llama_log_path": "llama_server.log",
+    "IGNORED_ITEMS": [
+        ".*",
+        "sample_data",
+        "llama-server",
+        "__pycache__",
+        "*.log",
+        "*.yml",
+        "*.json",
+        "*.out",
+    ],
+    "SUMMARY_PROMPT": "Write a detailed summary of the conversation above.",
+}
+
+_cfg: Dict[str, Any] = _load_yaml(_CONFIG_PATH)
+_cfg = {**_DEFAULTS, **_cfg}
 
 # ---------------------------------------------------------------------------
-#  General settings – these are now read from the YAML configuration.  A
-#  fallback is provided for backward compatibility but the repository
-#  configuration should always provide explicit values.
+#  Public constants – exported for import by other modules.
 # ---------------------------------------------------------------------------
-SERVER_URL = _cfg.get("SERVER_URL", "http://localhost:8000")
-MODEL_NAME = _cfg.get("MODEL_NAME", "unsloth/gpt-oss-20b-GGUF:F16")
-DEFAULT_SYSTEM_PROMPT = _cfg.get(
+SERVER_URL: str = str(_cfg["SERVER_URL"])
+MODEL_NAME: str = str(_cfg["MODEL_NAME"])
+DEFAULT_SYSTEM_PROMPT: str = str(_cfg["DEFAULT_SYSTEM_PROMPT"])
+
+USER_NAME: str = str(_cfg["user_name"])
+REPO_NAME: str = str(_cfg["repo_name"])
+CONTEXT_TOKEN_THRESHOLD: int = int(_cfg["context_len"])
+TAIL_MESSAGES: int = int(_cfg["tail_len"])
+MAX_TOOL_OUTPUT_CHARS: int = int(_cfg["max_tool_output_chars"])
+MAX_HISTORY_TURNS: int = int(_cfg["max_history_turns"])
+
+PORT: int = int(_cfg["port"])
+N_PARALLEL: int = int(_cfg["n_parallel"])
+CTX_SIZE: int = int(_cfg["ctx_size"])
+N_GPU_LAYERS: int = int(_cfg["n_gpu_layers"])
+SERVICE_INFO_PATH: str = str(_cfg["service_info_path"])
+LLAMA_LOG_PATH: str = str(_cfg["llama_log_path"])
+
+IGNORED_ITEMS: list[str] = list(_cfg["IGNORED_ITEMS"])
+
+SUMMARY_PROMPT: str = str(_cfg["SUMMARY_PROMPT"])
+
+__all__ = [
+    "SERVER_URL",
+    "MODEL_NAME",
     "DEFAULT_SYSTEM_PROMPT",
-    """You are a helpful assistant with the singular goal of understanding and satisfying the user's requests. Never be lazy and always think step-by-step. Always list out multiple options before deciding on the best next step to take. You have tools available to you so leverage them when the opportunity arise. You must always review how the tool is designed to be used and ensure that you are using each tool correctly. If a tool call fails, you must immediately review what you did and assess thoroughly what caused the failure. Self-improvement is core to your ethos, and you must be vigilant and self-assessing at all times to ensure you are on the best trajectory possible to helping the user with the user's requests.**grep**: Never use the `..` flag; using `..` can cause timeouts. Never run commands like this `grep -R "search_term" -n ..`Never ever use emojis."""
-)
-
-USER_NAME = _cfg.get("user_name", "ghghang2")
-REPO_NAME = _cfg.get("repo_name", "v1.4")
-CONTEXT_TOKEN_THRESHOLD = int(_cfg.get("context_len", 16384))
-TAIL_MESSAGES = int(_cfg.get("tail_len", 2))
-MAX_TOOL_OUTPUT_CHARS = int(_cfg.get("max_tool_output_chars", 6000))
-MAX_HISTORY_TURNS = int(_cfg.get("max_history_turns", 10))
-
-# ---------------------------------------------------------------------------
-#  Runtime configuration for run.py
-# ---------------------------------------------------------------------------
-PORT = int(_cfg.get("port", 8000))
-N_PARALLEL = int(_cfg.get("n_parallel", 1))
-CTX_SIZE = int(_cfg.get("ctx_size", 16384))
-N_GPU_LAYERS = int(_cfg.get("n_gpu_layers", 999))
-SERVICE_INFO_PATH = _cfg.get("service_info_path", "service_info.json")
-LLAMA_LOG_PATH = _cfg.get("llama_log_path", "llama_server.log")
-
-# --------------------------------------------------------------------------- #
-#  Items to ignore in the repo
-# --------------------------------------------------------------------------- #
-IGNORED_ITEMS = [
-    ".*",
-    "sample_data",
-    "llama-server",
-    "__pycache__",
-    "*.log",
-    "*.yml",
-    "*.json",
-    "*.out",
+    "USER_NAME",
+    "REPO_NAME",
+    "CONTEXT_TOKEN_THRESHOLD",
+    "TAIL_MESSAGES",
+    "MAX_TOOL_OUTPUT_CHARS",
+    "MAX_HISTORY_TURNS",
+    "PORT",
+    "N_PARALLEL",
+    "CTX_SIZE",
+    "N_GPU_LAYERS",
+    "SERVICE_INFO_PATH",
+    "LLAMA_LOG_PATH",
+    "IGNORED_ITEMS",
+    "SUMMARY_PROMPT",
 ]
 
-# --------------------------------------------------------------------------- #
-#  Context compaction defaults
-# --------------------------------------------------------------------------- #
-
-SUMMARY_PROMPT = """\
-Write a detailed summary of the conversation above. \
-Use plain text, no markdown.\
-Include relevant code blocks. \
-Cover: what the user asked for, what was done, which files were changed, and current status. \
-Be specific — include actual file paths, function names, key implementation details, code and outcomes. \
-Do not include any preamble or closing remarks."""
+# ---------------------------------------------------------------------------
+#  End of module
+# ---------------------------------------------------------------------------

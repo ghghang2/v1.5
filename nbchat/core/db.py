@@ -75,6 +75,39 @@ def log_message(session_id: str, role: str, content: str) -> None:
         conn.commit()
 
 
+def log_row(
+    session_id: str,
+    role: str,
+    content: str,
+    tool_id: str = "",
+    tool_name: str = "",
+    tool_args: str = "",
+) -> None:
+    """Persist a single row with all fields.
+
+    Use this for ``assistant_full`` rows (which carry tool_calls in
+    tool_args as JSON) and any other row type that needs the full schema.
+    Unlike ``log_message``, this never loses tool_id / tool_args data.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO chat_log
+                (session_id, role, content, tool_id, tool_name, tool_args)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                role,
+                content or "",
+                tool_id or "",
+                tool_name or "",
+                tool_args or "",
+            ),
+        )
+        conn.commit()
+
+
 def log_tool_msg(
     session_id: str,
     tool_id: str,

@@ -17,8 +17,8 @@ class ConversationMixin:
     """Mixed into ChatUI — expects self.history, self.task_log,
     self.system_prompt, self.model_name, self.session_id,
     self._stop_streaming, self._append, self._hard_trim,
-    self._log_action, self._window, and all renderer/executor/
-    chat_builder imports to be available."""
+    self._log_action, self._window, self._seen_calls, and all
+    renderer/executor/chat_builder imports to be available."""
 
     def _process_conversation_turn(self) -> None:
         from nbchat.ui import chat_renderer as renderer
@@ -47,9 +47,6 @@ class ConversationMixin:
         for msg in messages:
             msg.pop("reasoning_content", None)
 
-        # Track tool calls made this session: (tool_name, tool_args) -> result
-        # Used to detect and short-circuit duplicate calls.
-        _seen_calls: dict = {}
         # Stall detection: track the set of tool calls made each turn.
         # If the same set repeats STALL_TURNS times, inject a hard interrupt.
         STALL_TURNS = 3
@@ -81,7 +78,6 @@ class ConversationMixin:
                 break
 
             # --- Stall detection ---
-            # Record what tool calls were made this turn.
             turn_calls = frozenset(
                 (tc["function"]["name"], tc["function"]["arguments"])
                 for tc in tool_calls
@@ -91,7 +87,6 @@ class ConversationMixin:
                 _recent_call_sets.pop(0)
             if (len(_recent_call_sets) == STALL_TURNS
                     and len(set(_recent_call_sets)) == 1):
-                # All recent turns made identical tool calls — hard interrupt.
                 stall_msg = (
                     "You appear to be stuck in a loop — you have made the "
                     f"same tool calls {STALL_TURNS} turns in a row without "
@@ -116,19 +111,36 @@ class ConversationMixin:
             msg_for_model = {k: v for k, v in full_msg.items()
                              if k != "reasoning_content"}
             messages.append(msg_for_model)
+
+            # FIX: Store assistant_full to DB with all fields so session
+            # reload can reconstruct the tool_calls correctly.
+            # Strip reasoning_content from the persisted copy — it is
+            # output-only and can be thousands of tokens per step.
+            storable_msg = {k: v for k, v in full_msg.items()
+                            if k != "reasoning_content"}
+            full_msg_json = json.dumps(storable_msg)
             self.history.append(
-                ("assistant_full", "", "full", "full", json.dumps(full_msg))
+                ("assistant_full", "", "full", "full", full_msg_json)
             )
-            db.log_message(self.session_id, "assistant", content)
+            db.log_row(
+                self.session_id,
+                "assistant_full",
+                "",
+                "full",
+                "full",
+                full_msg_json,
+            )
 
             for tc in tool_calls:
                 tool_name = tc["function"]["name"]
                 tool_args = tc["function"]["arguments"]
                 call_key = (tool_name, tool_args)
 
-                # --- Duplicate call detection ---
-                if call_key in _seen_calls:
-                    prior = _seen_calls[call_key]
+                # --- Duplicate call detection (cross-turn via self._seen_calls) ---
+                # self._seen_calls persists across turns in this session so the
+                # model cannot repeat a call that fell outside the context window.
+                if call_key in self._seen_calls:
+                    prior = self._seen_calls[call_key]
                     model_result = (
                         f"[DUPLICATE CALL BLOCKED] You already called "
                         f"{tool_name} with these exact arguments. "
@@ -171,8 +183,13 @@ class ConversationMixin:
                 else:
                     model_result = compressed
 
-                # Remember this call so duplicates can be intercepted.
-                _seen_calls[call_key] = model_result
+                # Remember this call so duplicates can be intercepted across
+                # turns (self._seen_calls is reset only on session change).
+                self._seen_calls[call_key] = model_result
+                # Prevent unbounded growth: evict oldest entries beyond 200.
+                if len(self._seen_calls) > 200:
+                    oldest = next(iter(self._seen_calls))
+                    del self._seen_calls[oldest]
 
                 self._log_action(tool_name, tool_args, model_result)
 

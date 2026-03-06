@@ -9,7 +9,7 @@ from nbchat.tools import TOOLS
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
-MAX_TOOL_OUTPUT_CHARS = 6000
+from nbchat.core.config import MAX_TOOL_OUTPUT_CHARS
 
 
 def trim_tool_output(result: str, max_chars: int = MAX_TOOL_OUTPUT_CHARS) -> str:
