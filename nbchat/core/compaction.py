@@ -1,40 +1,19 @@
-"""Compaction Engine
-===================
-
-Keeps the token count sent to the model under a configured threshold by
-summarising the oldest portion of the conversation.
-
-Key design decisions
---------------------
-* History is never mutated with a ``compacted`` row.  The summary lives in
-  ``context_summary`` on the engine and is injected into the system prompt by
-  ``chat_builder.build_messages``.
-
-* Splitting is turn-aware.  History is grouped into logical *turns* (each
-  starting with a ``user`` row).  Compaction drops whole turns from the front
-  so we never accidentally split an ``assistant_full`` / ``tool`` / ``analysis``
-  triplet.
-
-* Oversized tool results are truncated in-place rather than being silently
-  dropped.  A single large tool output (e.g. a full file read) used to cause
-  total amnesia because _safe_tail would walk off the end of the list.
-
-* _safe_tail never returns an empty list.  It falls back progressively:
-  forward-nudge -> nearest user row -> full history.  Losing some token budget
-  is always better than total forgetfulness.
-
-* Successive compactions are cumulative: the previous context_summary is
-  fed to the summariser so the new summary folds it in without an extra API
-  call.
-"""
+"""Compaction Engine — keeps context within token limits by summarising history."""
 from __future__ import annotations
 
-import sys
+import logging
 import threading
 from typing import List, Tuple, Optional
 
 from nbchat.ui.chat_builder import build_messages
 from .client import get_client
+
+_log = logging.getLogger("nbchat.compaction")
+if not _log.handlers:
+    _h = logging.FileHandler("compaction.log", mode="a")
+    _h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    _log.addHandler(_h)
+    _log.setLevel(logging.DEBUG)
 
 _Row = Tuple[str, str, str, str, str]
 _DEPENDENT_ROLES = {"tool", "analysis", "assistant_full"}
@@ -42,14 +21,8 @@ _DEPENDENT_ROLES = {"tool", "analysis", "assistant_full"}
 
 class CompactionEngine:
 
-    def __init__(
-        self,
-        threshold: int,
-        tail_messages: int = 5,
-        summary_prompt: str = "",
-        summary_model: str = "",
-        system_prompt: str = "",
-    ) -> None:
+    def __init__(self, threshold, tail_messages=5, summary_prompt="",
+                 summary_model="", system_prompt=""):
         self.threshold = threshold
         self.tail_messages = tail_messages
         self.summary_prompt = summary_prompt
@@ -84,12 +57,19 @@ class CompactionEngine:
         return total
 
     def should_compact(self, history: List[_Row]) -> bool:
-        tokens = self.total_tokens(history)
+        history_tokens = self.total_tokens(history)
+        # Count the context_summary too — it is injected into the system prompt
+        # and consumes real context window space on every API call.
+        summary_tokens = (
+            self._estimate_tokens(self.context_summary)
+            if self.context_summary else 0
+        )
+        tokens = history_tokens + summary_tokens
         trigger = int(self.threshold * 0.75)
-        print(
-            f"[compaction] token estimate: {tokens} / {self.threshold}"
-            f" (trigger={trigger})",
-            file=sys.stderr,
+        _log.debug(
+            f"token estimate: {tokens} "
+            f"(history={history_tokens}, summary={summary_tokens}) "
+            f"/ {self.threshold} (trigger={trigger})"
         )
         return tokens >= trigger
 
@@ -116,44 +96,32 @@ class CompactionEngine:
 
     @staticmethod
     def _safe_tail(history: List[_Row], n: int) -> List[_Row]:
-        """Return the last n rows starting at a safe boundary.
+        """Return last n rows starting at a structurally safe boundary.
 
-        Priority:
-        1. Walk forward from tail_start past dependent roles.
-        2. If that exhausts the list, walk backward to nearest user row.
-        3. If no user row found, return full history.
-
-        Never returns an empty list — losing token budget beats total amnesia.
+        Falls back progressively:
+        1. Walk forward past dependent roles from tail_start.
+        2. Walk backward to nearest user row.
+        3. Return full history rather than empty list.
         """
         if not history or n <= 0:
             return history
 
         tail_start = max(0, len(history) - n)
 
-        # Walk forward past dependent roles.
         probe = tail_start
         while probe < len(history) and history[probe][0] in _DEPENDENT_ROLES:
             probe += 1
-
         if probe < len(history):
             return history[probe:]
 
-        # Forward walk exhausted — fall back to nearest user boundary.
         probe = len(history) - 1
         while probe > 0 and history[probe][0] != "user":
             probe -= 1
-
         if history[probe][0] == "user":
-            print(
-                f"[compaction] _safe_tail: fell back to user boundary at index {probe}",
-                file=sys.stderr,
-            )
+            _log.debug(f"_safe_tail: fell back to user boundary at index {probe}")
             return history[probe:]
 
-        print(
-            "[compaction] _safe_tail: no user boundary found, returning full history",
-            file=sys.stderr,
-        )
+        _log.debug("_safe_tail: no user boundary found, returning full history")
         return history
 
     # ------------------------------------------------------------------
@@ -162,12 +130,7 @@ class CompactionEngine:
 
     @staticmethod
     def _truncate_tool_results(rows: List[_Row], budget: int) -> List[_Row]:
-        """Truncate oversized tool result content so rows fit within budget.
-
-        Largest tool results are trimmed first.  A truncation notice is
-        appended so the model knows output was cut.  Non-tool rows are never
-        modified.
-        """
+        """Truncate oversized tool results largest-first until rows fit budget."""
         def est(text: str) -> int:
             return max(1, len(text) // 3)
 
@@ -197,10 +160,9 @@ class CompactionEngine:
             saved = est(content) - est(new_content)
             result[idx] = (role, new_content, tid, tname, targs)
             total -= saved
-            print(
-                f"[compaction] truncated tool result '{tname}'"
-                f" {len(content)} -> {len(new_content)} chars",
-                file=sys.stderr,
+            _log.debug(
+                f"truncated tool result '{tname}' "
+                f"{len(content)} -> {len(new_content)} chars"
             )
 
         return result
@@ -223,26 +185,38 @@ class CompactionEngine:
     # ------------------------------------------------------------------
 
     def compact_history(self, history: List[_Row]) -> List[_Row]:
-        print(
-            f"[compaction] compact_history called,"
-            f" history len={len(history)},"
-            f" tail_messages={self.tail_messages}",
-            file=sys.stderr,
+        _log.debug(
+            f"compact_history called, history len={len(history)}, "
+            f"tail_messages={self.tail_messages}"
         )
 
         if len(history) <= self.tail_messages:
-            print("[compaction] history too short to compact", file=sys.stderr)
+            _log.debug("history too short to compact")
             return history
 
         turns = self._group_into_turns(history)
-        threshold_tokens = int(self.threshold * 0.75)
+
+        # Reserve space for context_summary (existing + new one being produced).
+        # Target: tail rows use at most 50% of threshold so summary fits too.
+        summary_tokens = (
+            self._estimate_tokens(self.context_summary)
+            if self.context_summary else 0
+        )
+        tail_budget = max(
+            int(self.threshold * 0.40),
+            int(self.threshold * 0.75) - summary_tokens,
+        )
+        _log.debug(
+            f"tail_budget={tail_budget} tokens "
+            f"(summary_tokens={summary_tokens}, threshold={self.threshold})"
+        )
 
         to_summarise: List[_Row] = []
         remaining_turns: List[List[_Row]] = list(turns)
 
         while remaining_turns:
             remaining_flat = [row for t in remaining_turns for row in t]
-            if self.total_tokens(remaining_flat) <= threshold_tokens:
+            if self.total_tokens(remaining_flat) <= tail_budget:
                 break
 
             candidate_turn = remaining_turns[0]
@@ -254,22 +228,16 @@ class CompactionEngine:
                 if split_idx is not None:
                     to_summarise.extend(candidate_turn[:split_idx])
                     remaining_turns[0] = candidate_turn[split_idx:]
-                    print(
-                        f"[compaction] intra-turn split at index {split_idx}"
-                        f" within last turn of {len(candidate_turn)} rows",
-                        file=sys.stderr,
+                    _log.debug(
+                        f"intra-turn split at index {split_idx} "
+                        f"within last turn of {len(candidate_turn)} rows"
                     )
                 else:
-                    # No structural split possible — truncate tool results to
-                    # make the turn fit, summarise what we have, return truncated turn.
-                    print(
-                        "[compaction] cannot split last remaining turn —"
-                        " truncating oversized tool results in place",
-                        file=sys.stderr,
+                    _log.debug(
+                        "cannot split last remaining turn — "
+                        "truncating oversized tool results in place"
                     )
-                    truncated = self._truncate_tool_results(
-                        candidate_turn, threshold_tokens
-                    )
+                    truncated = self._truncate_tool_results(candidate_turn, tail_budget)
                     self.context_summary = self._call_summariser(
                         to_summarise if to_summarise else history
                     )
@@ -279,25 +247,22 @@ class CompactionEngine:
                 break
 
             turn_tokens = self.total_tokens(candidate_turn)
-            if turn_tokens >= threshold_tokens:
+            if turn_tokens >= tail_budget:
                 split_idx = self._find_safe_split(candidate_turn)
                 if split_idx is not None:
                     to_summarise.extend(candidate_turn[:split_idx])
                     remaining_turns[0] = candidate_turn[split_idx:]
-                    print(
-                        f"[compaction] oversized turn ({turn_tokens} tokens):"
-                        f" intra-turn split at index {split_idx}",
-                        file=sys.stderr,
+                    _log.debug(
+                        f"oversized turn ({turn_tokens} tokens): "
+                        f"intra-turn split at index {split_idx}"
                     )
                     continue
-                # No safe split — truncate tool results so it fits.
-                print(
-                    f"[compaction] oversized turn with no safe split"
-                    f" ({turn_tokens} tokens) — truncating tool results",
-                    file=sys.stderr,
+                _log.debug(
+                    f"oversized turn with no safe split "
+                    f"({turn_tokens} tokens) — truncating tool results"
                 )
                 remaining_turns[0] = self._truncate_tool_results(
-                    candidate_turn, threshold_tokens
+                    candidate_turn, tail_budget
                 )
                 to_summarise.extend(remaining_turns.pop(0))
                 continue
@@ -305,24 +270,20 @@ class CompactionEngine:
             to_summarise.extend(remaining_turns.pop(0))
 
         if not to_summarise:
-            print("[compaction] nothing to summarise", file=sys.stderr)
+            _log.debug("nothing to summarise")
             return history
 
         remaining_history = [row for t in remaining_turns for row in t]
 
-        # Guard: never return empty history.
         if not remaining_history:
-            print(
-                "[compaction] remaining_history empty after loop —"
-                " falling back to safe tail",
-                file=sys.stderr,
+            _log.debug(
+                "remaining_history empty after loop — falling back to safe tail"
             )
             remaining_history = self._safe_tail(history, self.tail_messages)
 
-        print(
-            f"[compaction] summarising {len(to_summarise)} rows,"
-            f" keeping {len(remaining_history)} rows",
-            file=sys.stderr,
+        _log.debug(
+            f"summarising {len(to_summarise)} rows, "
+            f"keeping {len(remaining_history)} rows"
         )
 
         self.context_summary = self._call_summariser(to_summarise)
@@ -337,10 +298,7 @@ class CompactionEngine:
     # ------------------------------------------------------------------
 
     def _call_summariser(self, older: List[_Row]) -> str:
-        # Truncate older before building messages so the summariser call
-        # itself doesn't overflow the context window.
         older = self._truncate_tool_results(older, self.threshold * 2)
-
         messages = build_messages(older, self.system_prompt)
 
         if self.context_summary:
@@ -355,18 +313,27 @@ class CompactionEngine:
         for msg in messages:
             msg.pop("reasoning_content", None)
 
-        # Remove dangling tool_calls from the last assistant message.
         if messages and messages[-1].get("role") == "assistant":
             messages[-1].pop("tool_calls", None)
             if not messages[-1].get("content"):
                 messages.pop()
 
-        messages.append({"role": "user", "content": self.summary_prompt})
+        messages.append({
+            "role": "user",
+            "content": (
+                "The conversation above needs to be summarised because we are "
+                "running out of context window. Please write a concise summary "
+                "covering:\n"
+                "1. Key decisions and conclusions reached\n"
+                "2. Important file paths, code changes, and edits made\n"
+                "3. Tool calls and their outcomes (condense large outputs to "
+                "key findings)\n"
+                "4. Current task status and next steps\n\n"
+                "Write only the summary, no preamble."
+            ),
+        })
 
-        print(
-            f"[compaction] sending {len(messages)} messages to summariser",
-            file=sys.stderr,
-        )
+        _log.debug(f"sending {len(messages)} messages to summariser")
 
         try:
             response = get_client().chat.completions.create(
@@ -378,10 +345,8 @@ class CompactionEngine:
             raise RuntimeError(f"Summarisation failed: {exc}") from exc
 
         summary = response.choices[0].message.content
-        print(
-            f"[compaction] summary produced ({len(summary)} chars):"
-            f" {summary[:120]}...",
-            file=sys.stderr,
+        _log.debug(
+            f"summary produced ({len(summary)} chars): {summary[:120]}..."
         )
         return summary
 

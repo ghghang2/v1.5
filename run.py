@@ -29,13 +29,13 @@ except ImportError:  # pragma: no cover - fallback when psutil is missing
 # --------------------------------------------------------------------------- #
 SERVICE_INFO  = Path("service_info.json")
 LLAMA_LOG     = Path("llama_server.log")
-REPO          = "ghghang2/llamacpp_t4_v1"
+REPO          = "ghghang2/llamacpp_t4_v2"
 # Q4_K_M (~12 GB) fits entirely in T4 VRAM — no CPU offload, maximum TPS.
 # Switch to Q8_0 (~21 GB) only if output quality is insufficient (will require partial CPU offload).
 MODEL         = "unsloth/gpt-oss-20b-GGUF:F16"
 PORT          = 8000
 N_PARALLEL    = 1      # matches 1-2 simultaneous users; fewer slots = faster per-request TPS
-CTX_SIZE      = 32768  # tokens per slot; total KV mem ≈ CTX_SIZE * N_PARALLEL * layers. 32K fits within T4 headroom at Q4_K_M + N_PARALLEL=2
+CTX_SIZE      = 16384  # tokens per slot; total KV mem ≈ CTX_SIZE * N_PARALLEL * layers. 32K fits within T4 headroom at Q4_K_M + N_PARALLEL=2
 N_GPU_LAYERS  = 999    # offload all layers to GPU (llama.cpp clamps to actual layer count)
 
 
@@ -127,8 +127,8 @@ def main() -> None:
                 "--ctx-size",     str(CTX_SIZE),
                 "--n-gpu-layers", str(N_GPU_LAYERS),
                 "--flash-attn", "1",
-                # "--batch-size", "4096",
-                # "--ubatch-size", "2048",
+                "--batch-size", "1024",
+                "--ubatch-size", "1024",
                 "--mlock",
                 "--metrics",
             ],
@@ -141,9 +141,6 @@ def main() -> None:
     log_file.close()  # parent closes its copy; child retains its own fd
 
     print(f"llama-server started (PID: {llama_proc.pid}) – waiting for health…")
-    if not _wait_for(f"http://localhost:{PORT}/health"):
-        llama_proc.terminate()
-        sys.exit("[ERROR] llama-server failed to start within timeout")
 
     # Install Python dependencies
     print("Installing Python dependencies…")
@@ -153,7 +150,20 @@ def main() -> None:
     print("Installing Playwright dependencies…")
     _run("sudo apt-get update -qq")
     _run("sudo apt-get install -y libxcomposite1 libgtk-3-0 libatk1.0-0")
-    _run("playwright install --with-deps firefox")
+    _run(
+        f"gh release download --repo {REPO} --pattern ffmpeg-linux --pattern firefox-1509.tar.gz --skip-existing",
+        extra_env={"GITHUB_TOKEN": os.environ["GITHUB_TOKEN"]},
+    )
+    _run("sudo mkdir -p /root/.cache/ms-playwright/ffmpeg-1011")
+    _run("sudo mkdir -p /root/.cache/ms-playwright/firefox-1509")
+    _run("sudo mv ffmpeg-linux /root/.cache/ms-playwright/ffmpeg-1011/")
+    _run("sudo chmod +x /root/.cache/ms-playwright/ffmpeg-1011/ffmpeg-linux")
+    _run("sudo tar -xzf firefox-1509.tar.gz -C /root/.cache/ms-playwright/firefox-1509 --strip-components=1")
+    _run("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npx --yes playwright install --with-deps firefox")
+
+    if not _wait_for(f"http://localhost:{PORT}/health"):
+        llama_proc.terminate()
+        sys.exit("[ERROR] llama-server failed to start within timeout")
 
     _save_service_info(llama_proc.pid)
     print("\nALL SERVICES RUNNING SUCCESSFULLY!")
