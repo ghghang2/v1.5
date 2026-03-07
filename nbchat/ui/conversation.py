@@ -136,34 +136,34 @@ class ConversationMixin:
                 tool_args = tc["function"]["arguments"]
                 call_key = (tool_name, tool_args)
 
-                # --- Duplicate call detection (cross-turn via self._seen_calls) ---
-                # self._seen_calls persists across turns in this session so the
-                # model cannot repeat a call that fell outside the context window.
-                if call_key in self._seen_calls:
-                    prior = self._seen_calls[call_key]
-                    model_result = (
-                        f"[DUPLICATE CALL BLOCKED] You already called "
-                        f"{tool_name} with these exact arguments. "
-                        f"Prior result: {prior[:400]}"
-                        + ("..." if len(prior) > 400 else "")
-                        + " — do not repeat this call. Use the result above "
-                        "and proceed to the next step."
-                    )
-                    _log.debug(f"duplicate call blocked: {tool_name}")
-                    self._append(renderer.render_tool(
-                        model_result, tool_name, tool_args
-                    ))
-                    messages.append(
-                        {"role": "tool", "tool_call_id": tc["id"],
-                         "content": model_result}
-                    )
-                    self.history.append(
-                        ("tool", model_result, tc["id"], tool_name, tool_args)
-                    )
-                    db.log_tool_msg(
-                        self.session_id, tc["id"], tool_name, tool_args, model_result
-                    )
-                    continue
+                # # --- Duplicate call detection (cross-turn via self._seen_calls) ---
+                # # self._seen_calls persists across turns in this session so the
+                # # model cannot repeat a call that fell outside the context window.
+                # if call_key in self._seen_calls:
+                #     prior = self._seen_calls[call_key]
+                #     model_result = (
+                #         f"[DUPLICATE CALL BLOCKED] You already called "
+                #         f"{tool_name} with these exact arguments. "
+                #         f"Prior result: {prior[:400]}"
+                #         + ("..." if len(prior) > 400 else "")
+                #         + " — do not repeat this call. Use the result above "
+                #         "and proceed to the next step."
+                #     )
+                #     _log.debug(f"duplicate call blocked: {tool_name}")
+                #     self._append(renderer.render_tool(
+                #         model_result, tool_name, tool_args
+                #     ))
+                #     messages.append(
+                #         {"role": "tool", "tool_call_id": tc["id"],
+                #          "content": model_result}
+                #     )
+                #     self.history.append(
+                #         ("tool", model_result, tc["id"], tool_name, tool_args)
+                #     )
+                #     db.log_tool_msg(
+                #         self.session_id, tc["id"], tool_name, tool_args, model_result
+                #     )
+                #     continue
 
                 # --- Normal execution ---
                 raw_result = executor.run_tool(tool_name, tool_args)
