@@ -9,7 +9,7 @@ def build_messages(
     history: List[Tuple[str, str, str, str, str]],
     system_prompt: str,
     task_log: List[str] | None = None,
-) -> List[Dict[str, str]]:
+) -> List[Dict]:
     """Build OpenAI messages from internal chat history.
 
     Parameters
@@ -21,9 +21,8 @@ def build_messages(
         The system message to prepend.
     task_log:
         Optional list of recent action strings maintained by ChatUI.
-        When provided they are appended to the system prompt so the model
-        always knows what it has been doing even when old messages are
-        outside the window.
+        Appended to the system prompt so the model always knows what it
+        has been doing even when old messages are outside the window.
     """
     system_content = system_prompt
     if task_log:
@@ -35,16 +34,17 @@ def build_messages(
             + "\n[END ACTION LOG]"
         )
 
-    messages: List[Dict[str, str]] = [{"role": "system", "content": system_content}]
+    messages: List[Dict] = [{"role": "system", "content": system_content}]
 
     for role, content, tool_id, tool_name, tool_args in history:
         if role == "user":
             messages.append({"role": "user", "content": content})
+
         elif role == "assistant":
             if tool_id:
                 messages.append({
                     "role": "assistant",
-                    "content": content,
+                    "content": content or None,
                     "tool_calls": [{
                         "id": tool_id,
                         "type": "function",
@@ -53,19 +53,26 @@ def build_messages(
                 })
             else:
                 messages.append({"role": "assistant", "content": content})
+
         elif role == "assistant_full":
             try:
                 full_msg = json.loads(tool_args)
-                # Always strip reasoning_content — it is an output-only field
-                # that the API rejects when sent back, and old DB rows may still
-                # contain it if they were written before this was enforced in
-                # conversation.py.
                 full_msg.pop("reasoning_content", None)
+                # Normalize content: must be None (not "") when tool_calls are
+                # present. Older DB rows may have been written with content=""
+                # before this was enforced; sanitize on reconstruction so
+                # small models don't misread the conversation state and emit
+                # subsequent tool calls as reasoning text instead of structured
+                # output.
+                if full_msg.get("tool_calls") and not full_msg.get("content"):
+                    full_msg["content"] = None
                 messages.append(full_msg)
             except Exception:
                 messages.append({"role": "assistant", "content": content})
+
         elif role == "system":
             messages.append({"role": "system", "content": content})
+
         elif role == "tool":
             messages.append({
                 "role": "tool",
