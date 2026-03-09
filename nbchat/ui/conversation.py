@@ -53,7 +53,6 @@ class ConversationMixin:
             if self._stop_streaming:
                 break
 
-            _log.debug("MESSAGES_TO_MODEL:\n" + json.dumps(messages, indent=2, default=str))
             reasoning, content, tool_calls, finish_reason = self._stream_response(
                 real_client, messages
             )
@@ -151,16 +150,23 @@ class ConversationMixin:
         reasoning_accum = ""
         content_accum = ""
         tool_buffer: dict = {}
-        tool_call_indices: set = set()
         finish_reason = None
 
         self._hard_trim(messages)
         _sanitize_messages(messages)
 
+        # Disable thinking on tool-continuation turns (any turn where the last
+        # message is a tool result). Qwen3 smaller models get stuck in <think>
+        # and never emit structured tool calls when thinking is active on these
+        # turns. The first turn keeps thinking enabled for initial reasoning.
+        is_tool_continuation = messages[-1].get("role") == "tool"
+        extra_body = {"chat_template_kwargs": {"thinking": not is_tool_continuation}}
+
         try:
             stream = real_client.chat.completions.create(
                 model=self.model_name, messages=messages,
                 stream=True, tools=tools, max_tokens=4096,
+                extra_body=extra_body,
             )
             for chunk in stream:
                 if self._stop_streaming:
@@ -200,8 +206,17 @@ class ConversationMixin:
                     assistant_widget.value = renderer.render_assistant(content_accum).value
 
         except Exception as exc:
-            _log.debug(f"_stream_response failed: {type(exc).__name__}: {exc}", exc_info=True)
-            raise
+            # The OpenAI SDK streaming validator raises APIError("Invalid diff:
+            # now finding less tool calls!") when llama.cpp emits tool call
+            # delta chunks in a format that appears inconsistent — this happens
+            # specifically when thinking=False is active. By the time this fires
+            # the tool_buffer is already fully populated, so treat it as a
+            # normal end-of-stream rather than a hard failure.
+            if "now finding less tool calls" in str(exc):
+                _log.debug("suppressed SDK streaming diff error — tool_buffer complete")
+            else:
+                _log.debug(f"_stream_response failed: {type(exc).__name__}: {exc}", exc_info=True)
+                raise
 
         tool_calls = [tool_buffer[i] for i in sorted(tool_buffer)] if tool_buffer else None
 
