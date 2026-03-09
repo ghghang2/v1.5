@@ -1,13 +1,12 @@
 """Context management mixin for ChatUI.
 
-Four mechanisms keep messages within the model's context limit:
+Three mechanisms keep messages within the model's context limit:
   1. Sliding window   — only the last WINDOW_TURNS user turns enter the window.
   2. Prior context    — turns that slid off are summarized per-turn by an LLM
                         and injected as a single system row so the model retains
                         full awareness of earlier goals, corrections, and outcomes.
   3. Hard trim        — enforced immediately before every API call as a last
                         resort, dropping oldest tool-exchange pairs atomically.
-  4. Importance scoring — exchanges are scored and least important are dropped first.
 """
 from __future__ import annotations
 
@@ -28,19 +27,6 @@ _SUMMARY_PROMPT = (
     "and the final state or result. Be factual and concrete. No preamble."
 )
 
-# New structured summary prompt for Phase 1 improvements
-_STRUCTURED_SUMMARY_PROMPT = (
-    "Analyze this conversation segment and provide a structured summary in JSON format:\n"
-    "{\n"
-    '  "goal": "What was the user trying to accomplish?",\n'
-    '  "entity_deltas": [\n'
-    '    {"entity": "file_path_or_api", "action": "created/modified/deleted", "state": "current_state"},\n'
-    '  ],\n'
-    '  "rationale": "Why were these actions taken and what was the outcome?"\n'
-    "}\n"
-    "Be concise and factual. If no entity changes occurred, set entity_deltas to empty array."
-)
-
 # Truncate individual tool results to this length before sending to summarizer
 # to avoid blowing the summarizer's own context.
 _SUMMARIZER_TOOL_CHARS = 2_000
@@ -53,32 +39,6 @@ class ContextMixin:
       self.history, self.task_log, self.system_prompt, self.model_name,
       self.session_id, self._turn_summary_cache, self.WINDOW_TURNS
     """
-    
-    # ------------------------------------------------------------------
-    # Importance scoring for exchanges (Phase 1)
-    # ------------------------------------------------------------------
-    
-    def _calculate_importance_score(self, exchange: List[_Row]) -> float:
-        """Calculate importance score for a tool exchange.
-        
-        Higher scores indicate exchanges that should be retained longer.
-        Scores range from 0.0 (least important) to 10.0 (most important).
-        """
-        score = 1.0  # Base score
-        
-        # Check for errors or exceptions
-        for row in exchange:
-            content = row[1].lower()
-            if any(keyword in content for keyword in ["error", "exception", "failed", "failed to", "cannot"]):
-                score += 3.0
-            # Check for user corrections
-            if row[0] == "user" and any(keyword in content for keyword in ["correct", "wrong", "actually", "instead"]):
-                score += 2.5
-            # Check for successful tool outcomes
-            if row[0] == "tool" and any(keyword in content for keyword in ["success", "completed", "done", "created"]):
-                score += 1.5
-        
-        return min(score, 10.0)
 
     # ------------------------------------------------------------------
     # Sliding window
@@ -208,7 +168,7 @@ class ContextMixin:
 
     def _hard_trim(self, messages: list) -> None:
         """Drop oldest tool-exchange pairs until messages fit the token budget.
-        
+
         An exchange = one assistant-with-tool-calls + all immediately following
         tool-result messages.  Always dropped atomically to preserve the
         invariant that every tool message has a preceding assistant tool_call.
@@ -220,50 +180,39 @@ class ContextMixin:
         config = lazy_import("nbchat.core.config")
         limit = int(config.CONTEXT_TOKEN_THRESHOLD * 0.85)
         MAX_EXCHANGES = config.MAX_EXCHANGES
-        KEEP_RECENT = 3
+        KEEP_RECENT = config.KEEP_RECENT_EXCHANGES
+
+        def est(msg: dict) -> int:
+            content = msg.get("content") or ""
+            tcs = msg.get("tool_calls") or []
+            tc_text = "".join(tc.get("function", {}).get("arguments", "") for tc in tcs)
+            return max(1, (len(content) + len(tc_text)) // 3)
 
         def total() -> int:
-            return sum(
-                len(m.get("content", "")) for m in messages
-            )
+            return sum(est(m) for m in messages)
 
-        def get_exchanges() -> List[Tuple[int, int]]:
-            """Return list of (start, end) indices for each tool exchange."""
+        def get_exchanges() -> list:
             result = []
-            i = 2  # Start after system and prior-context
+            i = 2  # protect system (0) and prior-context/first-user (1)
             while i < len(messages):
-                if (
-                    messages[i].get("role") == "assistant"
-                    and messages[i].get("tool_calls")
-                ):
-                    start = i
+                m = messages[i]
+                if m.get("role") == "assistant" and m.get("tool_calls"):
                     end = i + 1
                     while end < len(messages) and messages[end].get("role") == "tool":
                         end += 1
-                    result.append((start, end))
+                    result.append((i, end))
                     i = end
                 else:
                     i += 1
             return result
 
         # Pass 1: hard cap on exchange count (prevents cascade on long sessions).
-        # Modified to use importance scoring instead of pure recency
         while True:
             exchanges = get_exchanges()
             if len(exchanges) <= MAX_EXCHANGES:
                 break
-            
-            # Calculate importance scores for each exchange
-            exchange_scores = []
-            for start_idx, end_idx in exchanges:
-                exchange_rows = messages[start_idx:end_idx]
-                score = self._calculate_importance_score(exchange_rows)
-                exchange_scores.append((score, start_idx, end_idx))
-            
-            # Sort by importance (lowest first) and drop least important
-            exchange_scores.sort(key=lambda x: x[0])
-            _, s, e = exchange_scores[0]
-            _log.debug(f"_hard_trim: cap drop [{s}:{e}], score={exchange_scores[0][0]:.2f}, {len(exchanges)} exchanges")
+            s, e = exchanges[0]
+            _log.debug(f"_hard_trim: cap drop [{s}:{e}], {len(exchanges)} exchanges")
             del messages[s:e]
 
         # Pass 2: token-budget drops, keeping the most recent KEEP_RECENT exchanges.
@@ -272,19 +221,7 @@ class ContextMixin:
             droppable = exchanges[:-KEEP_RECENT] if len(exchanges) > KEEP_RECENT else []
             if not droppable:
                 break
-            
-            # Calculate importance scores for droppable exchanges
-            exchange_scores = []
-            for start_idx, end_idx in droppable:
-                exchange_rows = messages[start_idx:end_idx]
-                score = self._calculate_importance_score(exchange_rows)
-                exchange_scores.append((score, start_idx, end_idx))
-            
-            # Sort by importance and drop least important
-            exchange_scores.sort(key=lambda x: x[0])
-            _, s, e = exchange_scores[0]
-            
-            # Log what's being dropped
+            s, e = droppable[0]
             dropped = [messages[s + j].get("content", "")[:80]
                        for j in range(1, e - s)
                        if messages[s + j].get("role") == "tool"]
