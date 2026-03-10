@@ -46,8 +46,6 @@ class ChatUI(ContextMixin, ConversationMixin):
         self.history: List[Tuple[str, str, str, str, str]] = []
         self.task_log: List[str] = []
         self._seen_calls: dict = {}
-        # Per-turn summary cache: {sha1_hash: summary_str}.
-        # Seeded from DB on session load; persisted on every new summary.
         self._turn_summary_cache: dict = {}
 
         self._stop_streaming = False
@@ -57,6 +55,44 @@ class ChatUI(ContextMixin, ConversationMixin):
         self._start_metrics_updater()
         self._load_history()
         display(self.layout)
+        self._inject_scroll_preservation()
+
+    # ------------------------------------------------------------------
+    # Scroll preservation
+    # ------------------------------------------------------------------
+
+    def _inject_scroll_preservation(self) -> None:
+        """Inject a one-time JS MutationObserver that preserves scroll position.
+
+        ipywidgets VBox replaces the entire DOM subtree on every .children
+        reassignment, which resets scrollTop to 0.  The observer intercepts
+        every childList mutation and restores the last known scroll position,
+        so reading position is never disrupted by appends, streaming, or pruning.
+        """
+        from IPython.display import Javascript, display as ipy_display
+        js = """
+        (function() {
+            function attach() {
+                var el = document.querySelector('.nbchat-history');
+                if (!el) { setTimeout(attach, 400); return; }
+                if (el._nbchatObserver) return;
+
+                var savedScroll = 0;
+                el.addEventListener('scroll', function() {
+                    savedScroll = el.scrollTop;
+                }, { passive: true });
+
+                el._nbchatObserver = new MutationObserver(function() {
+                    requestAnimationFrame(function() {
+                        el.scrollTop = savedScroll;
+                    });
+                });
+                el._nbchatObserver.observe(el, { childList: true });
+            }
+            attach();
+        })();
+        """
+        ipy_display(Javascript(js))
 
     # ------------------------------------------------------------------
     # Session state reset
@@ -113,7 +149,7 @@ class ChatUI(ContextMixin, ConversationMixin):
         self.chat_history = widgets.VBox([], layout=widgets.Layout(
             width="100%", height="100%", max_height="800px", overflow_y="auto",
             border="1px solid #ccc",
-        ))
+        ), _dom_classes=["nbchat-history"])
         self.input_text = widgets.Textarea(
             placeholder="...",
             layout=widgets.Layout(width="90%", min_height="50px", height="auto"),
@@ -201,8 +237,6 @@ class ChatUI(ContextMixin, ConversationMixin):
         self.history = list(db.load_history(self.session_id))
         self.task_log = db.load_task_log(self.session_id)
         self._seen_calls = {}
-        # Restore turn summary cache so previously generated summaries
-        # are reused without extra LLM calls on session reload.
         self._turn_summary_cache = db.load_turn_summaries(self.session_id)
         self._render_history()
 
@@ -251,16 +285,29 @@ class ChatUI(ContextMixin, ConversationMixin):
         return renderer.render_assistant(content)
 
     def _append(self, widget: widgets.HTML):
-        """Append a widget, pruning oldest if panel exceeds MAX_VISIBLE_WIDGETS."""
-        children = list(self.chat_history.children) + [widget]
+        """Append a widget to the chat panel.
+
+        Pruning is intentionally NOT done here — replacing .children mid-stream
+        resets the browser scroll position to the top, disrupting the user if
+        they are reading earlier messages.  Pruning happens in _on_send instead,
+        where a scroll reset is natural (the user just submitted a new message).
+        """
+        self.chat_history.children = list(self.chat_history.children) + [widget]
+
+    def _prune_widgets(self) -> None:
+        """Prune oldest widgets if the panel exceeds MAX_VISIBLE_WIDGETS.
+
+        Called from _on_send only — at that point the user has just interacted
+        with the input box so scrolling to the bottom is expected behaviour.
+        """
+        children = list(self.chat_history.children)
         if len(children) > self.MAX_VISIBLE_WIDGETS:
             trim = len(children) - self.MAX_VISIBLE_WIDGETS
             note = renderer.render_system(
                 f"[{trim} earlier messages pruned from view to maintain performance. "
                 f"Full history is saved in the database.]"
             )
-            children = [note] + children[trim:]
-        self.chat_history.children = children
+            self.chat_history.children = [note] + children[trim:]
 
     # ------------------------------------------------------------------
     # Event handlers
@@ -294,6 +341,9 @@ class ChatUI(ContextMixin, ConversationMixin):
             self._stop_streaming = True
             self._stream_thread.join()
 
+        # Prune before appending the new message — scroll reset is acceptable
+        # here since the user just submitted input and expects to see the bottom.
+        self._prune_widgets()
         self.history.append(("user", user_input, "", "", ""))
         self._append(renderer.render_user(user_input))
         db.log_message(self.session_id, "user", user_input)

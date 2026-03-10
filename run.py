@@ -160,7 +160,7 @@ def main() -> None:
     print("Installing Playwright dependencies…")
     _run("sudo apt-get update -qq")
     _run("sudo apt-get install -y libxcomposite1 libgtk-3-0 libatk1.0-0")
-    _run("playwright install --with-deps firefox")
+    _run("playwright install --with-deps chromium")
 
     if not _wait_for(f"http://localhost:{PORT}/health"):
         llama_proc.terminate()
