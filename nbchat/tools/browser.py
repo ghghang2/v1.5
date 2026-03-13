@@ -156,7 +156,50 @@ def browser(
         except json.JSONDecodeError:
             pass
 
-    if not url:
+    # =========================================================================
+    # INPUT VALIDATION
+    # =========================================================================
+
+    # Validate URL parameter
+    if url is None or url.strip() == "":
+        return _err("URL is required.", hint="Provide a full URL including scheme, e.g. https://example.com")
+
+    if not isinstance(url, str):
+        return _err(f"URL must be a string, got {type(url).__name__}.", 
+                    hint="Provide a string URL, e.g. 'https://example.com'")
+
+    # Strip whitespace from URL
+    url = url.strip()
+
+    # Validate URL format
+    if not re.match(r"https?://", url):
+        url = "https://" + url  # auto-fix missing scheme
+    elif not re.match(r"https?://[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$", url):
+        # Allow special URLs like mailto:, ftp:, etc. - just continue
+        pass
+
+    # Validate actions parameter if provided
+    if actions is not None and not isinstance(actions, list):
+        return _err(f"actions must be a list, got {type(actions).__name__}.",
+                    hint="Provide actions as a list of dicts, e.g. [{'type': 'click', 'selector': '.button'}]")
+
+    # Validate actions list content if provided
+    if actions is not None:
+        for i, act in enumerate(actions):
+            if not isinstance(act, dict):
+                return _err(f"actions[{i}] must be a dict, got {type(act).__name__}.",
+                            hint="Each action should be a dict with 'type' key, e.g. {'type': 'click', 'selector': '.button'}")
+            if "type" not in act:
+                act["type"] = ""  # Allow empty type, will be handled in action execution
+
+    # Validate kwargs
+    if kwargs.get("kwargs"):
+        if not isinstance(kwargs["kwargs"], str):
+            return _err("kwargs['kwargs'] must be a string if provided.",
+                        hint="When using kwargs, provide it as a JSON string")
+
+
+
         return _err("URL is required.", hint="Provide a full URL including scheme, e.g. https://example.com")
 
     if not re.match(r"https?://", url):
