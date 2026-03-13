@@ -67,7 +67,8 @@ def run_tool(tool_name: str, args_json: str, timeout: int | None = None) -> str:
             initial_delay=1.0,
             max_delay=10.0,
         )
-        return result
+        # Trim large outputs to prevent SDK streaming issues with large tool results
+        return trim_tool_output(result)
     except Exception as e:
         return f"Tool '{tool_name}' failed after {DEFAULT_MAX_RETRIES} retries: {e}"
 
