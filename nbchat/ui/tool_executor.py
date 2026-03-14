@@ -10,26 +10,6 @@ from nbchat.core.retry import retry_with_backoff, DEFAULT_MAX_RETRIES
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
-from nbchat.core.config import MAX_TOOL_OUTPUT_CHARS
-
-
-def trim_tool_output(result: str, max_chars: int = MAX_TOOL_OUTPUT_CHARS) -> str:
-    """Trim large tool outputs to keep them within context budget.
-
-    Keeps the first and last halves of the output so both the beginning
-    (often the most structured part) and the end (often the result) are
-    preserved.
-    """
-    if len(result) <= max_chars:
-        return result
-    half = max_chars // 2
-    removed = len(result) - max_chars
-    return (
-        result[:half]
-        + f"\n[...{removed} chars trimmed — output too large for context window...]\n"
-        + result[-half:]
-    )
-
 
 def run_tool(tool_name: str, args_json: str, timeout: int | None = None) -> str:
     """Execute a tool with arguments and return the (trimmed) string result.
@@ -67,8 +47,8 @@ def run_tool(tool_name: str, args_json: str, timeout: int | None = None) -> str:
             initial_delay=1.0,
             max_delay=10.0,
         )
-        # Trim large outputs to prevent SDK streaming issues with large tool results
-        return trim_tool_output(result)
+        
+        return result
     except Exception as e:
         return f"Tool '{tool_name}' failed after {DEFAULT_MAX_RETRIES} retries: {e}"
 

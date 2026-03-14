@@ -13,6 +13,7 @@ Design principles (informed by Browser-Use, Stagehand, Browserbase research):
 from __future__ import annotations
 
 import json
+import random
 import re
 from typing import Any
 
@@ -52,7 +53,8 @@ _JS_EXTRACT = """
     document.querySelectorAll('select').forEach(el => add(el, 'select'));
 
     // Clean body text: collapse whitespace, drop script/style noise
-    const clone = document.body.cloneNode(true);
+    const body = document.body || document.documentElement;
+    const clone = body.cloneNode(true);
     clone.querySelectorAll('script,style,noscript,svg').forEach(n => n.remove());
     const text = clone.innerText.replace(/[ \\t]{2,}/g, ' ').replace(/\\n{3,}/g, '\\n\\n').trim();
 
@@ -106,7 +108,7 @@ def browser(
     selector: str | None = None,
     extract_elements: bool = False,
     navigation_timeout: int = 30000,
-    action_timeout: int = 8000,
+    action_timeout: int = 5000,
     max_content_length: int = 8000,
     wait_until: str = "domcontentloaded",
     **kwargs,
@@ -137,7 +139,7 @@ def browser(
     navigation_timeout:
         Ms to wait for page navigation (default 30000).
     action_timeout:
-        Ms to wait for each action's selector/click (default 8000).
+        Ms to wait for each action's selector/click (default 5000).
     max_content_length:
         Max characters of page text returned (default 8000).
     wait_until:
@@ -145,65 +147,47 @@ def browser(
         ``'load'`` (waits for all resources), or ``'networkidle'`` (slowest, most complete).
     """
 
-    # Unpack if LLM wraps args in a kwargs string
-    if kwargs.get("kwargs") and isinstance(kwargs["kwargs"], str):
-        try:
-            extra = json.loads(kwargs["kwargs"])
-            if isinstance(extra, dict):
-                url = url or extra.get("url", "")
-                actions = actions or extra.get("actions")
-                selector = selector or extra.get("selector")
-        except json.JSONDecodeError:
-            pass
-
     # =========================================================================
     # INPUT VALIDATION
     # =========================================================================
 
-    # Validate URL parameter
-    if url is None or url.strip() == "":
-        return _err("URL is required.", hint="Provide a full URL including scheme, e.g. https://example.com")
+    if url is None or not isinstance(url, str) or url.strip() == "":
+        # FIX: Only fall back to kwargs if url is genuinely missing, never
+        # overwrite a valid url argument with kwargs content.
+        extra_url = None
+        if kwargs.get("kwargs") and isinstance(kwargs["kwargs"], str):
+            try:
+                extra = json.loads(kwargs["kwargs"])
+                if isinstance(extra, dict):
+                    extra_url = extra.get("url", "")
+                    actions = actions or extra.get("actions")
+                    selector = selector or extra.get("selector")
+            except json.JSONDecodeError:
+                pass
+        if not extra_url:
+            return _err("URL is required.", hint="Provide a full URL including scheme, e.g. https://example.com")
+        url = extra_url
 
     if not isinstance(url, str):
-        return _err(f"URL must be a string, got {type(url).__name__}.", 
+        return _err(f"URL must be a string, got {type(url).__name__}.",
                     hint="Provide a string URL, e.g. 'https://example.com'")
 
-    # Strip whitespace from URL
     url = url.strip()
 
-    # Validate URL format
     if not re.match(r"https?://", url):
         url = "https://" + url  # auto-fix missing scheme
-    elif not re.match(r"https?://[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$", url):
-        # Allow special URLs like mailto:, ftp:, etc. - just continue
-        pass
 
-    # Validate actions parameter if provided
     if actions is not None and not isinstance(actions, list):
         return _err(f"actions must be a list, got {type(actions).__name__}.",
                     hint="Provide actions as a list of dicts, e.g. [{'type': 'click', 'selector': '.button'}]")
 
-    # Validate actions list content if provided
     if actions is not None:
         for i, act in enumerate(actions):
             if not isinstance(act, dict):
                 return _err(f"actions[{i}] must be a dict, got {type(act).__name__}.",
                             hint="Each action should be a dict with 'type' key, e.g. {'type': 'click', 'selector': '.button'}")
             if "type" not in act:
-                act["type"] = ""  # Allow empty type, will be handled in action execution
-
-    # Validate kwargs
-    if kwargs.get("kwargs"):
-        if not isinstance(kwargs["kwargs"], str):
-            return _err("kwargs['kwargs'] must be a string if provided.",
-                        hint="When using kwargs, provide it as a JSON string")
-
-
-
-        return _err("URL is required.", hint="Provide a full URL including scheme, e.g. https://example.com")
-
-    if not re.match(r"https?://", url):
-        url = "https://" + url  # auto-fix missing scheme
+                act["type"] = ""
 
     def _run() -> str:
         with sync_playwright() as p:
@@ -216,8 +200,10 @@ def browser(
                     "--disable-gpu",
                 ],
             )
+            # FIX: Use random UA selection instead of deterministic hash, so
+            # repeated visits to the same URL don't expose a consistent fingerprint.
             ctx = browser_inst.new_context(
-                user_agent=_USER_AGENTS[hash(url) % len(_USER_AGENTS)],
+                user_agent=random.choice(_USER_AGENTS),
                 viewport={"width": 1280, "height": 800},
                 locale="en-US",
                 timezone_id="America/New_York",
@@ -227,128 +213,149 @@ def browser(
                 },
             )
 
-            # Block heavy resources for speed
-            ctx.route(
-                "**/*",
-                lambda route: route.abort()
-                if route.request.resource_type in _BLOCK_TYPES
-                else route.continue_(),
-            )
-
-            page = ctx.new_page()
-            page.add_init_script(_JS_STEALTH)
-
-            # Navigate
             try:
-                resp = page.goto(url, timeout=navigation_timeout, wait_until=wait_until)
-            except PWTimeout:
-                return _err(f"TimeoutError navigating to {url}")
-            except Exception as e:
-                return _err(f"Navigation failed: {e}")
+                # Block heavy resources for speed
+                ctx.route(
+                    "**/*",
+                    lambda route: route.abort()
+                    if route.request.resource_type in _BLOCK_TYPES
+                    else route.continue_(),
+                )
 
-            status = resp.status if resp else 0
-            if status in (403, 404, 429, 500):
-                return _err(f"HTTP {status} from {url}")
+                page = ctx.new_page()
+                page.add_init_script(_JS_STEALTH)
 
-            # Perform actions
-            log: list[str] = []
-            current_url = url
-            for i, act in enumerate(actions or []):
-                act_type = act.get("type", "")
+                # Navigate
                 try:
-                    if act_type == "click":
-                        sel = act.get("selector", "")
-                        if not sel:
-                            raise ValueError("'selector' is required for click")
-                        page.click(sel, timeout=action_timeout)
-                        log.append(f"clicked '{sel}'")
-
-                    elif act_type == "type":
-                        sel, text = act.get("selector", ""), act.get("text", "")
-                        if not sel or text == "":
-                            raise ValueError("'selector' and 'text' are required for type")
-                        page.fill(sel, text, timeout=action_timeout)
-                        log.append(f"typed into '{sel}'")
-
-                    elif act_type == "select":
-                        sel, val = act.get("selector", ""), act.get("value", "")
-                        if not sel:
-                            raise ValueError("'selector' is required for select")
-                        page.select_option(sel, value=val, timeout=action_timeout)
-                        log.append(f"selected '{val}' in '{sel}'")
-
-                    elif act_type == "wait":
-                        if "selector" in act:
-                            page.wait_for_selector(act["selector"], timeout=action_timeout)
-                            log.append(f"waited for '{act['selector']}'")
-                        elif "timeout" in act:
-                            page.wait_for_timeout(act["timeout"])
-                            log.append(f"waited {act['timeout']}ms")
-                        else:
-                            raise ValueError("'selector' or 'timeout' required for wait")
-
-                    elif act_type == "scroll":
-                        direction = act.get("direction", "down")
-                        amount = int(act.get("amount", 500))
-                        dy = amount if direction == "down" else -amount
-                        page.evaluate(f"window.scrollBy(0, {dy})")
-                        log.append(f"scrolled {direction} {amount}px")
-
-                    elif act_type == "navigate":
-                        dest = act.get("url", "")
-                        if not dest:
-                            raise ValueError("'url' is required for navigate")
-                        page.goto(dest, timeout=navigation_timeout, wait_until=wait_until)
-                        current_url = dest
-                        log.append(f"navigated to '{dest}'")
-
-                    elif act_type == "screenshot":
-                        path = act.get("path", "screenshot.png")
-                        page.screenshot(path=path)
-                        log.append(f"screenshot saved to '{path}'")
-
-                    else:
-                        log.append(f"unknown action type '{act_type}' (skipped) – supported: click, type, select, wait, scroll, navigate, screenshot")
-
+                    resp = page.goto(url, timeout=navigation_timeout, wait_until=wait_until)
                 except PWTimeout:
-                    log.append(f"TIMEOUT on action {i} ({act_type}) – selector may not exist; use extract_elements=true to inspect the page")
+                    return _err(f"TimeoutError navigating to {url}")
                 except Exception as e:
-                    log.append(f"ERROR on action {i} ({act_type}): {e}")
+                    return _err(f"Navigation failed: {e}")
 
-            # Extract content
-            if selector:
-                try:
-                    page.wait_for_selector(selector, timeout=action_timeout)
-                    content = "\n".join(page.locator(selector).all_inner_texts())
-                except Exception:
-                    return _err(
-                        f"selector '{selector}' not found",
-                        hint="Use extract_elements=true to see available selectors, or omit selector for full-page text.",
-                        page_url=page.url,
-                    )
-            else:
-                data: dict = page.evaluate(_JS_EXTRACT)
-                content = data.get("text", "")
+                status = resp.status if resp else 0
+                if status in (403, 404, 429, 500):
+                    return _err(f"HTTP {status} from {url}")
 
-            ctx.close()
-            browser_inst.close()
+                # Perform actions
+                log: list[str] = []
+                action_errors: list[str] = []
+                # FIX: Track current URL via Playwright's live page.url rather than
+                # manually, so redirects and client-side navigation are captured.
+                for i, act in enumerate(actions or []):
+                    act_type = act.get("type", "")
+                    try:
+                        if act_type == "click":
+                            sel = act.get("selector", "")
+                            if not sel:
+                                raise ValueError("'selector' is required for click")
+                            page.click(sel, timeout=action_timeout)
+                            log.append(f"clicked '{sel}'")
 
-            result: dict[str, Any] = {
-                "status": "success",
-                "url": page.url if page.url != "about:blank" else current_url,
-            }
-            if log:
-                result["actions"] = log
-            if selector:
-                result["content"] = content[:max_content_length]
-            else:
-                result["title"] = data.get("title", "")
-                result["content"] = content[:max_content_length]
-                if extract_elements:
-                    result["interactive"] = data.get("interactive", [])
-                    result["links"] = data.get("links", [])
+                        elif act_type == "type":
+                            sel, text = act.get("selector", ""), act.get("text", "")
+                            if not sel or text == "":
+                                raise ValueError("'selector' and 'text' are required for type")
+                            page.fill(sel, text, timeout=action_timeout)
+                            log.append(f"typed into '{sel}'")
 
-            return json.dumps(result)
+                        elif act_type == "select":
+                            sel, val = act.get("selector", ""), act.get("value", "")
+                            if not sel:
+                                raise ValueError("'selector' is required for select")
+                            page.select_option(sel, value=val, timeout=action_timeout)
+                            log.append(f"selected '{val}' in '{sel}'")
+
+                        elif act_type == "wait":
+                            if "selector" in act:
+                                page.wait_for_selector(act["selector"], timeout=action_timeout)
+                                log.append(f"waited for '{act['selector']}'")
+                            elif "timeout" in act:
+                                page.wait_for_timeout(act["timeout"])
+                                log.append(f"waited {act['timeout']}ms")
+                            else:
+                                raise ValueError("'selector' or 'timeout' required for wait")
+
+                        elif act_type == "scroll":
+                            direction = act.get("direction", "down")
+                            amount = int(act.get("amount", 500))
+                            dy = amount if direction == "down" else -amount
+                            page.evaluate(f"window.scrollBy(0, {dy})")
+                            log.append(f"scrolled {direction} {amount}px")
+
+                        elif act_type == "navigate":
+                            dest = act.get("url", "")
+                            if not dest:
+                                raise ValueError("'url' is required for navigate")
+                            page.goto(dest, timeout=navigation_timeout, wait_until=wait_until)
+                            log.append(f"navigated to '{dest}'")
+
+                        elif act_type == "screenshot":
+                            path = act.get("path", "screenshot.png")
+                            page.screenshot(path=path)
+                            log.append(f"screenshot saved to '{path}'")
+
+                        else:
+                            log.append(f"unknown action type '{act_type}' (skipped) – supported: click, type, select, wait, scroll, navigate, screenshot")
+
+                    except PWTimeout:
+                        msg = f"TIMEOUT on action {i} ({act_type}) – selector may not exist; use extract_elements=true to inspect the page"
+                        log.append(msg)
+                        action_errors.append(msg)
+                    except Exception as e:
+                        msg = f"ERROR on action {i} ({act_type}): {e}"
+                        log.append(msg)
+                        action_errors.append(msg)
+
+                # Extract content
+                # FIX: Always capture live URL from page after all navigation/actions.
+                final_url = page.url if page.url not in ("about:blank", "") else url
+
+                if selector:
+                    try:
+                        page.wait_for_selector(selector, timeout=action_timeout)
+                        content = "\n".join(page.locator(selector).all_inner_texts())
+                    except Exception:
+                        return _err(
+                            f"selector '{selector}' not found",
+                            hint="Use extract_elements=true to see available selectors, or omit selector for full-page text.",
+                            page_url=final_url,
+                        )
+                    # FIX: data is only defined in the else branch; build result
+                    # directly here to avoid NameError on data.get("title", ...).
+                    result: dict[str, Any] = {
+                        # FIX: Reflect action failures in status instead of always
+                        # reporting success even when every action errored out.
+                        "status": "partial" if action_errors else "success",
+                        "url": final_url,
+                        "content": content[:max_content_length],
+                    }
+                else:
+                    data: dict = page.evaluate(_JS_EXTRACT)
+                    content = data.get("text", "")
+                    result = {
+                        "status": "partial" if action_errors else "success",
+                        "url": final_url,
+                        "title": data.get("title", ""),
+                        "content": content[:max_content_length],
+                    }
+                    # FIX: Only evaluate interactive/links when actually requested,
+                    # rather than always extracting them and then discarding.
+                    if extract_elements:
+                        result["interactive"] = data.get("interactive", [])
+                        result["links"] = data.get("links", [])
+
+                if log:
+                    result["actions"] = log
+                if action_errors:
+                    result["action_errors"] = action_errors
+
+                return json.dumps(result)
+
+            finally:
+                # FIX: Always close context and browser, even if extraction raises.
+                ctx.close()
+                browser_inst.close()
 
     # Single retry for transient network hiccups
     try:

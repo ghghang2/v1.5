@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
+from .config import MAX_TOOL_OUTPUT_CHARS
 
 _log = logging.getLogger("nbchat.compaction")
 if not _log.handlers:
@@ -15,10 +16,6 @@ if not _log.handlers:
     _h.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
     _log.addHandler(_h)
     _log.setLevel(logging.DEBUG)
-
-# Tool outputs shorter than this pass through verbatim — no LLM call.
-# Set high enough that most file reads are preserved intact.
-COMPRESS_THRESHOLD_CHARS = 8000
 
 # These tools always produce content worth keeping verbatim.
 # Never run relevance filtering on them — just truncate if huge.
@@ -39,13 +36,13 @@ def compress_tool_output(
     """Return a compressed version of *result*.
 
     Strategy:
-    1. Short outputs (< COMPRESS_THRESHOLD_CHARS) pass through unchanged.
+    1. Short outputs (< MAX_TOOL_OUTPUT_CHARS) pass through unchanged.
     2. File-read and command tools use head+tail truncation — no LLM call,
        no information loss through relevance filtering.
     3. All other tools use an LLM call that preserves structure (signatures,
        errors, paths, values) rather than filtering by relevance.
     """
-    if len(result) <= COMPRESS_THRESHOLD_CHARS:
+    if len(result) <= MAX_TOOL_OUTPUT_CHARS:
         return result
 
     _log.debug(
@@ -56,10 +53,10 @@ def compress_tool_output(
     # Relevance filtering causes the model to re-read files repeatedly
     # because the summary is too thin to act on.
     if tool_name in ALWAYS_KEEP_TOOLS:
-        half = COMPRESS_THRESHOLD_CHARS // 2
+        half = MAX_TOOL_OUTPUT_CHARS // 2
         compressed = (
             result[:half]
-            + f"\n[...{len(result) - COMPRESS_THRESHOLD_CHARS} chars omitted"
+            + f"\n[...{len(result) - MAX_TOOL_OUTPUT_CHARS} chars omitted"
             f" (middle of output)...]\n"
             + result[-half:]
         )
@@ -70,10 +67,9 @@ def compress_tool_output(
 
     # For other tools (search results, API responses, etc.) use LLM
     # compression that preserves structure rather than filtering relevance.
-    max_raw = 12_000
-    truncated_input = result[:max_raw] + (
-        f"\n[...{len(result) - max_raw} chars truncated for compression...]"
-        if len(result) > max_raw else ""
+    truncated_input = result[:MAX_TOOL_OUTPUT_CHARS] + (
+        f"\n[...{len(result) - MAX_TOOL_OUTPUT_CHARS} chars truncated for compression...]"
+        if len(result) > MAX_TOOL_OUTPUT_CHARS else ""
     )
 
     prompt = (
@@ -82,7 +78,7 @@ def compress_tool_output(
         f"Output:\n{truncated_input}\n\n"
         "Summarise this output concisely. Preserve:\n"
         "- All function/class/method signatures and names\n"
-        "- Error messages and stack traces verbatim\n"
+        "- Key error messages and stack traces verbatim\n"
         "- File paths and line numbers\n"
         "- Any values explicitly returned or printed\n"
         "Omit only: blank lines, boilerplate comments, and large repeated blocks.\n"
@@ -95,7 +91,7 @@ def compress_tool_output(
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=512,
+            max_tokens=MAX_TOOL_OUTPUT_CHARS,
         )
         compressed = response.choices[0].message.content.strip()
         _log.debug(
@@ -105,12 +101,12 @@ def compress_tool_output(
         return compressed
     except Exception as e:
         _log.debug(f"compress: LLM call failed ({e}), falling back to truncation")
-        half = COMPRESS_THRESHOLD_CHARS // 2
+        half = MAX_TOOL_OUTPUT_CHARS // 2
         return (
             result[:half]
-            + f"\n[...{len(result) - COMPRESS_THRESHOLD_CHARS} chars omitted...]\n"
+            + f"\n[...{len(result) - MAX_TOOL_OUTPUT_CHARS} chars omitted...]\n"
             + result[-half:]
         )
 
 
-__all__ = ["compress_tool_output", "COMPRESS_THRESHOLD_CHARS", "ALWAYS_KEEP_TOOLS"]
+__all__ = ["compress_tool_output", "MAX_TOOL_OUTPUT_CHARS", "ALWAYS_KEEP_TOOLS"]

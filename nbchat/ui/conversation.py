@@ -147,15 +147,12 @@ class ConversationMixin:
                     model=self.model_name,
                     client=real_client,
                 )
+                
                 model_result = (
                     f"[{tool_name}: no relevant output]"
                     if compressed.strip() == "NO_RELEVANT_OUTPUT"
                     else compressed
                 )
-
-                self._seen_calls[call_key] = model_result
-                if len(self._seen_calls) > 200:
-                    del self._seen_calls[next(iter(self._seen_calls))]
 
                 self._log_action(tool_name, tool_args, model_result)
                 self.history.append(("tool", raw_result, tc["id"], tool_name, tool_args))
