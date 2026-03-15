@@ -200,6 +200,7 @@ class ConversationMixin:
                 stream=True, tools=tools, max_tokens=4096,
             )
             for chunk in stream:
+                _log.debug(f"RAW CHUNK: {chunk.model_dump_json()}")
                 if self._stop_streaming:
                     stream.close()
                     break
@@ -235,19 +236,32 @@ class ConversationMixin:
                         self.chat_history.children = children
                     content_accum += delta.content
                     assistant_widget.value = renderer.render_assistant(content_accum).value
-
         except Exception as exc:
-            # The OpenAI SDK streaming validator raises APIError("Invalid diff:
-            # now finding less tool calls!") when llama.cpp emits tool call
-            # delta chunks in a format that appears inconsistent — this happens
-            # specifically when thinking=False is active. By the time this fires
-            # the tool_buffer is already fully populated, so treat it as a
-            # normal end-of-stream rather than a hard failure.
             if "now finding less tool calls" in str(exc):
-                _log.debug("suppressed SDK streaming diff error — tool_buffer complete")
+                _log.warning(
+                    f"SDK diff error fired.\n"
+                    f"  tool_buffer state: {json.dumps(tool_buffer, indent=2)}\n"
+                    f"  finish_reason so far: {finish_reason}\n"
+                    f"  content_accum length: {len(content_accum)}\n"
+                    f"  reasoning_accum length: {len(reasoning_accum)}"
+                )
+                # temporarily re-raise so we see the full traceback
+                raise
             else:
                 _log.debug(f"_stream_response failed: {type(exc).__name__}: {exc}", exc_info=True)
                 raise
+        # except Exception as exc:
+        #     # The OpenAI SDK streaming validator raises APIError("Invalid diff:
+        #     # now finding less tool calls!") when llama.cpp emits tool call
+        #     # delta chunks in a format that appears inconsistent — this happens
+        #     # specifically when thinking=False is active. By the time this fires
+        #     # the tool_buffer is already fully populated, so treat it as a
+        #     # normal end-of-stream rather than a hard failure.
+        #     if "now finding less tool calls" in str(exc):
+        #         _log.debug("suppressed SDK streaming diff error — tool_buffer complete")
+        #     else:
+        #         _log.debug(f"_stream_response failed: {type(exc).__name__}: {exc}", exc_info=True)
+        #         raise
 
         tool_calls = [tool_buffer[i] for i in sorted(tool_buffer)] if tool_buffer else None
 
