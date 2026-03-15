@@ -138,7 +138,7 @@ def log_tool_msg(session_id: str, tool_id: str, tool_name: str,
 
 
 def load_history(session_id: str,
-                 limit: int | None = None) -> list[tuple[str, str, str, str, str, int]]:
+                 limit: int | None = None) -> list[tuple[str, str, int, str, str, str]]:
     with sqlite3.connect(DB_PATH) as conn:
         query = (
             "SELECT role, content, error_flag,"

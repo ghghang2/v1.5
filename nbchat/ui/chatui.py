@@ -43,7 +43,7 @@ class ChatUI(ContextMixin, ConversationMixin):
         self.model_name = config.MODEL_NAME
 
         self.session_id = str(uuid.uuid4())
-        self.history: List[Tuple[str, str, str, str, str]] = []
+        self.history: List[Tuple[str, str, int, str, str, str]] = []
         self.task_log: List[str] = []
         self._seen_calls: dict = {}
         self._turn_summary_cache: dict = {}

@@ -6,7 +6,7 @@ from typing import List, Dict, Tuple
 
 
 def build_messages(
-    history: List[Tuple[str, str, str, str, str]],
+    history: List[Tuple[str, str, int, str, str, str]],
     system_prompt: str,
     task_log: List[str] | None = None,
 ) -> List[Dict]:
@@ -80,7 +80,11 @@ def build_messages(
 
     messages: List[Dict] = [{"role": "system", "content": system_content}]
 
-    for role, content, tool_id, tool_name, tool_args in non_system_history:
+    for row in non_system_history:
+        # row format: (role, content, error_flag, tool_id, tool_name, tool_args)
+        # Note: error_flag is stored in the database for UI rendering but
+        # is not needed for message building; we unpack only the fields we use.
+        role, content, _, tool_id, tool_name, tool_args = row
         if role == "user":
             messages.append({"role": "user", "content": content})
 
