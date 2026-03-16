@@ -4276,3 +4276,45 @@ prompt eval time =    5379.15 ms /  2476 tokens (    2.17 ms per token,   460.30
       total time =   10923.58 ms /  2553 tokens
 slot      release: id  0 | task 14667 | stop processing: n_tokens = 30628, truncated = 0
 srv  update_slots: all slots are idle
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 0.998 (> 0.100 thold), f_keep = 1.000
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> ?min-p -> ?xtc -> ?temp-ext -> dist 
+slot launch_slot_: id  0 | task 14749 | processing task, is_child = 0
+slot update_slots: id  0 | task 14749 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 30665
+slot update_slots: id  0 | task 14749 | n_past = 30617, slot.prompt.tokens.size() = 30628, seq_id = 0, pos_min = 30627, n_swa = 1
+slot update_slots: id  0 | task 14749 | restored context checkpoint (pos_min = 30039, pos_max = 30039, n_tokens = 30040, size = 50.251 MiB)
+slot update_slots: id  0 | task 14749 | n_tokens = 30040, memory_seq_rm [30040, end)
+slot update_slots: id  0 | task 14749 | prompt processing progress, n_tokens = 30153, batch.n_tokens = 113, progress = 0.983303
+slot update_slots: id  0 | task 14749 | n_tokens = 30153, memory_seq_rm [30153, end)
+slot init_sampler: id  0 | task 14749 | init sampler, took 4.27 ms, tokens: text = 30665, total = 30665
+slot update_slots: id  0 | task 14749 | erasing old context checkpoint (pos_min = 21703, pos_max = 21703, n_tokens = 21704, size = 50.251 MiB)
+slot update_slots: id  0 | task 14749 | created context checkpoint 8 of 8 (pos_min = 30152, pos_max = 30152, n_tokens = 30153, size = 50.251 MiB)
+slot update_slots: id  0 | task 14749 | prompt processing done, n_tokens = 30665, batch.n_tokens = 512
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+slot print_timing: id  0 | task 14749 | 
+prompt eval time =    1451.79 ms /   625 tokens (    2.32 ms per token,   430.50 tokens per second)
+       eval time =   46284.42 ms /   636 tokens (   72.77 ms per token,    13.74 tokens per second)
+      total time =   47736.21 ms /  1261 tokens
+slot      release: id  0 | task 14749 | stop processing: n_tokens = 31300, truncated = 0
+srv  update_slots: all slots are idle
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 0.999 (> 0.100 thold), f_keep = 1.000
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> ?min-p -> ?xtc -> ?temp-ext -> dist 
+slot launch_slot_: id  0 | task 15387 | processing task, is_child = 0
+slot update_slots: id  0 | task 15387 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 31326
+slot update_slots: id  0 | task 15387 | n_tokens = 31300, memory_seq_rm [31300, end)
+slot init_sampler: id  0 | task 15387 | init sampler, took 4.41 ms, tokens: text = 31326, total = 31326
+slot update_slots: id  0 | task 15387 | erasing old context checkpoint (pos_min = 22901, pos_max = 22901, n_tokens = 22902, size = 50.251 MiB)
+slot update_slots: id  0 | task 15387 | created context checkpoint 8 of 8 (pos_min = 31299, pos_max = 31299, n_tokens = 31300, size = 50.251 MiB)
+slot update_slots: id  0 | task 15387 | prompt processing done, n_tokens = 31326, batch.n_tokens = 26
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+slot print_timing: id  0 | task 15387 | 
+prompt eval time =     171.87 ms /    26 tokens (    6.61 ms per token,   151.28 tokens per second)
+       eval time =   18573.54 ms /   257 tokens (   72.27 ms per token,    13.84 tokens per second)
+      total time =   18745.41 ms /   283 tokens
+slot      release: id  0 | task 15387 | stop processing: n_tokens = 31582, truncated = 0
+srv  update_slots: all slots are idle
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 10489526435
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 31582, total state size = 1037.550 MiB
