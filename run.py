@@ -139,8 +139,9 @@ def main() -> None:
                 "--chat-template-kwargs", '{"enable_thinking": false}', # false for 9B, true for 27B
                 "--cache-type-k", "q8_0", 
                 "--cache-type-v", "q8_0",
-                # "--batch-size", "4096",
-                "--ubatch-size", "2048",
+                "--batch-size", "512",
+                "--ubatch-size", "512",
+                "--no-mmap",
                 # "--mlock",
                 "--metrics",
             ],
