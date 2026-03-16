@@ -538,7 +538,7 @@ class ContextMixin:
             resp = _client_mod.get_client().chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                max_tokens=256,
+                max_tokens=512,
             )
             summary = resp.choices[0].message.content.strip()
             _log.debug(f"turn summary ({len(summary)} chars): {summary[:80]}...")

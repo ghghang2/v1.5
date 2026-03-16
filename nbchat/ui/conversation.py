@@ -281,6 +281,7 @@ class ConversationMixin:
     def _stream_response(self, real_client, messages):
         from nbchat.ui import chat_renderer as renderer
         tools = lazy_import("nbchat.tools")
+        config = lazy_import("nbchat.core.config")
 
         reasoning_widget = None
         assistant_widget = None
@@ -295,7 +296,7 @@ class ConversationMixin:
         try:
             stream = real_client.chat.completions.create(
                 model=self.model_name, messages=messages,
-                stream=True, tools=tools, max_tokens=4096,
+                stream=True, tools=tools, max_tokens=config.MAX_TOOL_OUTPUT_CHARS,
             )
             for chunk in stream:
                 if self._stop_streaming:
