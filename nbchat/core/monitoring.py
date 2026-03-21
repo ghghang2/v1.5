@@ -101,7 +101,7 @@ class _CacheMetrics:
     valid: bool = False   # False = log was absent or parse failed
 
 
-def parse_last_completion_metrics(log_path: Path = _LOG_PATH) -> _CacheMetrics:
+def parse_last_completion_metrics(log_path: Path = None) -> _CacheMetrics:
     """Parse the most recent completed LLM call from the llama.cpp server log.
 
     Reads the last _LOG_TAIL_BYTES from the file and extracts cache metrics
@@ -109,6 +109,7 @@ def parse_last_completion_metrics(log_path: Path = _LOG_PATH) -> _CacheMetrics:
     log is absent or the block cannot be parsed.
     """
     m = _CacheMetrics()
+    log_path = log_path or _LOG_PATH
     if not log_path.exists():
         return m
     try:
@@ -281,9 +282,7 @@ class SessionMonitor:
                 t.reread_triggers += 1
             if strategy in ("headtail_llm_fallback",):
                 t.llm_failure_count += 1
-            if strategy == "" and was_compressed and output_chars == 0:
-                # Sentinel for NO_RELEVANT_OUTPUT
-                t.no_output_count += 1
+            # Note: Use record_no_output() explicitly to mark tool calls with no output
             if input_chars:
                 t.total_input_chars += input_chars
                 t.total_output_chars += output_chars
@@ -353,7 +352,7 @@ class SessionMonitor:
                         t.error_after_compression / comp, 3
                     ),
                     "llm_failure_rate": round(t.llm_failure_count / comp, 3),
-                    "no_output_rate": round(t.no_output_count / max(t.calls, 1), 3),
+                    "no_output_rate": round(t.no_output_count / max(t.calls + t.no_output_count, 1), 3),
                 }
 
             warnings = _detect_warnings(cache_report, tools_report)

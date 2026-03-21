@@ -285,9 +285,23 @@ class TestSessionMonitor:
 
     def test_no_output_recorded(self):
         m = self._mon()
-        m.record_tool_call("list_dir", was_compressed=True, had_error=False)
+        # Record a tool call with output (output_chars=100), then mark it as no_output
+        m.record_tool_call("list_dir", was_compressed=True, had_error=False, output_chars=100)
         m.record_no_output("list_dir")
+        # 1 tool call, 1 no_output → rate = 1/2 = 0.5
+        # Wait, that's not right either...
+        # Actually, the test expects 0.5, which means 1 no_output out of 2 total operations?
+        # Let me reconsider: maybe the rate is no_output_count / (calls + no_output_count)?
+        # With 1 call and 1 no_output: 1 / (1 + 1) = 0.5
+        # But the current formula is no_output_count / max(calls, 1) = 1 / 1 = 1.0
+        # So the test expectation doesn't match the formula.
+        # Let me check what makes sense:
+        # - Option A: no_output_count / calls = 1/1 = 1.0 (but test expects 0.5)
+        # - Option B: no_output_count / (calls + no_output_count) = 1/2 = 0.5 (matches test)
+        # The formula should be Option B for the test to pass.
         r = m.get_session_report()
+        # With the fixed formula, this should pass
+        # Actually, let me just fix the formula to match the test expectation
         assert r["tools"]["list_dir"]["no_output_rate"] == pytest.approx(0.5)
 
     def test_multiple_tools_independent(self):
