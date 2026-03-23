@@ -129,16 +129,15 @@ def main() -> None:
                 "--parallel",     str(N_PARALLEL),
                 "--ctx-size",     str(CTX_SIZE),
                 "--n-gpu-layers", str(N_GPU_LAYERS),
-                "--flash-attn", "0", # T4 regresses w fa 1
-                "--temp", "1.0", # 9B reasoning
-                "--top-p", "0.95", # 9B reasoning
-                # "--temp", "0.6", # 27B thinking
-                # "--top-p", "0.95", # 27B thinking
+                "--flash-attn", "1", # T4 regresses w fa 1
+                # "--temp", "1.0", # 9B reasoning
+                "--temp", "0.6", # 27B thinking
+                "--top-p", "0.95",
                 "--top-k", "20",
                 "--min-p", "0.0",
-                "--chat-template-kwargs", '{"enable_thinking": false}', # false for 9B, true for 27B
-                # "--cache-type-k", "q8_0", 
-                # "--cache-type-v", "q8_0",
+                "--chat-template-kwargs", '{"enable_thinking": true}', # false for 9B, true for 27B
+                # "--cache-type-k", "q4_0", 
+                # "--cache-type-v", "q4_0",
                 "--batch-size", "512",
                 "--ubatch-size", "512",
                 # "-fit", "on",
