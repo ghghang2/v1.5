@@ -216,52 +216,68 @@ class ChatUI(ContextMixin, ConversationMixin):
     def _start_metrics_updater(self):
         def update_loop():
             from nbchat.ui.styles import CODE_COLOR
+            from nbchat.core.config import SERVER_URL
+            import urllib.request
+            import urllib.error
+            
             while True:
                 try:
-                    log_path = Path("llama_server.log")
-                    if log_path.exists():
-                        with open(log_path, "rb") as f:
-                            f.seek(0, 2)
-                            f.seek(max(0, f.tell() - 4000))
-                            lines = f.read().decode("utf-8", errors="ignore").splitlines()
-                        # proc is True when the LLM server is actively processing
-                        # tokens OR when a tool is currently executing.  The LLM
-                        # server is legitimately idle between tool calls, but the
-                        # agent loop is still running — showing black during tool
-                        # execution was a false signal to the user.
-                        server_active = any(
-                            "slot update_slots:" in l.lower() for l in lines[-10:]
-                        )
-                        if any("all slots are idle" in l.lower() for l in lines[-5:]):
-                            server_active = False
-                        proc = server_active or self._tool_running
-                        tps = 0.0
-                        for line in reversed(lines):
-                            if "eval time" in line.lower():
-                                m = re.search(
-                                    r"(?P<value>\d+(?:\.\d+)?)\s+tokens per second",
-                                    line, re.IGNORECASE,
-                                )
-                                if m:
-                                    tps = float(m.group("value"))
-                                    break
-                        emoji = "🟢" if proc else "⚫"
-                        content = (
-                            f'<b>Server</b> {emoji}<br>'
-                            f'<b>TPS:</b> <code style="color:{CODE_COLOR};">{tps}</code><br>'
-                            f'<i>{time.strftime("%H:%M:%S")}</i>'
-                        )
-                        try:
-                            cf = changed_files()
-                            if cf:
-                                content += (
-                                    "<br><br><b>Changed files:</b><br>"
-                                    + "<br>".join(cf)
-                                )
-                        except Exception:
-                            pass
-                    else:
-                        content = "<i>Log file not found</i>"
+                    # Fetch metrics from the llama-server HTTP endpoint
+                    metrics_url = f"{SERVER_URL}/metrics"
+                    try:
+                        with urllib.request.urlopen(metrics_url, timeout=5) as response:
+                            metrics_text = response.read().decode("utf-8", errors="ignore")
+                    except (urllib.error.URLError, urllib.error.HTTPError) as e:
+                        self.metrics_output.value = f"<i>Cannot connect to metrics endpoint: {e}</i>"
+                        time.sleep(1)
+                        continue
+                    
+                    # Parse llamacpp:requests_processing metric
+                    # This toggles 1 if server is processing, 0 if idle
+                    server_processing = False
+                    tps = 0.0
+                    
+                    for line in metrics_text.splitlines():
+                        # Check if server is processing requests
+                        if line.startswith("llamacpp:requests_processing"):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                try:
+                                    server_processing = float(parts[1]) == 1.0
+                                except ValueError:
+                                    pass
+                        
+                        # Parse TPS (tokens per second) from eval_time metric
+                        if "llamacpp:eval_time" in line.lower() or "eval_time" in line.lower():
+                            # Look for TPS value in the metrics
+                            m = re.search(r"(\d+(?:\.\d+)?)\s*tokens/s", line, re.IGNORECASE)
+                            if m:
+                                try:
+                                    tps = float(m.group(1))
+                                except ValueError:
+                                    pass
+                    
+                    # proc is True when the LLM server is actively processing
+                    # tokens OR when a tool is currently executing.  The LLM
+                    # server is legitimately idle between tool calls, but the
+                    # agent loop is still running — showing black during tool
+                    # execution was a false signal to the user.
+                    proc = server_processing or self._tool_running
+                    emoji = "🟢" if proc else "⚫"
+                    content = (
+                        f'<b>Server</b> {emoji}<br>'
+                        f'<b>TPS:</b> <code style="color:{CODE_COLOR};">{tps}</code><br>'
+                        f'<i>{time.strftime("%H:%M:%S")}</i>'
+                    )
+                    try:
+                        cf = changed_files()
+                        if cf:
+                            content += (
+                                "<br><br><b>Changed files:</b><br>"
+                                + "<br>".join(cf)
+                            )
+                    except Exception:
+                        pass
                 except Exception as e:
                     content = f"<i>Error: {e}</i>"
                 self.metrics_output.value = content
